@@ -356,7 +356,7 @@ def render_frame(image_path, bar_heights, text_config, size,
     if progress is not None:
         bar_h = 5
         bar_y = 20 if progress_bar_top else h - 28
-        draw.rectangle([0, bar_y, w, bar_y + bar_h], fill=(255, 255, 255, 40))
+        draw.rectangle([0, bar_y, w, bar_y + bar_h], fill=(*ac, 60))
         if progress > 0:
             draw.rectangle([0, bar_y, int(w * progress), bar_y + bar_h], fill=(*ac, 220))
 
