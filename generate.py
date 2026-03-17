@@ -172,7 +172,7 @@ def load_config(data_dir: Path):
         extras = {
             "font":                  cfg.get("font", None),
             "font_color":            parse_color(cfg.get("font_color", None)),
-            "progress_bar":          cfg.get("progress_bar", True),
+            "progress_bar":          cfg.get("progress_bar", True),   # default on
             "progress_bar_position": cfg.get("progress_bar_position", "top"),
             "accent_color":          parse_color(cfg.get("accent_color", None)),
             "overlay_color":         parse_color(cfg.get("overlay_color", None)),
@@ -247,7 +247,14 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         })
         print(f"  {wav.name}: {total:.1f}s  →  start={format_timecode(auto_start)}")
 
+    schema_path = Path(__file__).parent / "config.schema.json"
+    try:
+        rel_schema = os.path.relpath(schema_path, data_dir)
+    except ValueError:
+        rel_schema = str(schema_path)
+
     cfg = {
+        "$schema":       rel_schema,
         "ep_title":      data_dir.name.replace("-", " ").title(),
         "clip_duration": clip_duration_default,
         "accent_color":    accent_hex,
@@ -256,7 +263,7 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         "format":          "square",
         "overlay_color":   "#000000",
         "overlay_opacity": 0.7,
-        "progress_bar":          False,
+        "progress_bar":          True,
         "progress_bar_position": "top",
         "tracks":                tracks,
     }
@@ -581,8 +588,7 @@ def main():
     ep_overlay_opacity  = extras.get("overlay_opacity")
 
     project_root = Path(__file__).parent
-    export_dir = project_root / "export" / ep_name / ("carousel" if output_format == "carousel" else "")
-    export_dir = export_dir.resolve()
+    export_dir = (project_root / "export" / ep_name / output_format).resolve()
     export_dir.mkdir(parents=True, exist_ok=True)
 
     mode = "preview" if args.preview else output_format
@@ -614,8 +620,7 @@ def main():
                       cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
                       progress_bar_top=progress_bar_top)
         if args.preview:
-            save_preview(track, export_dir.parent if output_format == "carousel" else export_dir,
-                         output_format, **kwargs)
+            save_preview(track, export_dir, output_format, **kwargs)
         elif output_format == "carousel":
             save_carousel_slide(track, i, export_dir, force=args.force, **kwargs)
         else:

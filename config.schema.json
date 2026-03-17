@@ -1,0 +1,166 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "config.schema.json",
+  "title": "insta-tile-generator config",
+  "description": "Configuration file for the Instagram tile generator",
+  "type": "object",
+  "required": ["tracks"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "ep_title": {
+      "type": "string",
+      "description": "Release/EP name — used as the export subfolder name. Defaults to the data folder name."
+    },
+    "clip_duration": {
+      "type": ["number", "null"],
+      "description": "Default clip length in seconds. Omit to use the full track length.",
+      "minimum": 1,
+      "examples": [30]
+    },
+    "accent_color": {
+      "$ref": "#/$defs/color",
+      "description": "Accent color for the waveform and headline. Auto-extracted from cover if null."
+    },
+    "font_color": {
+      "$ref": "#/$defs/color",
+      "description": "Text color for track title and copy. Defaults to white (#ffffff)."
+    },
+    "font": {
+      "type": ["string", "null"],
+      "description": "Path to a .ttf font file. Uses the system font if null.",
+      "examples": ["fonts/MyFont.ttf"]
+    },
+    "format": {
+      "type": "string",
+      "enum": ["square", "reel", "carousel"],
+      "description": "Default output format. square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs.",
+      "default": "square"
+    },
+    "overlay_color": {
+      "$ref": "#/$defs/color",
+      "description": "Gradient overlay color. Defaults to black (#000000)."
+    },
+    "overlay_opacity": {
+      "type": ["number", "null"],
+      "description": "Gradient overlay strength 0.0–1.0. Defaults to 0.7.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.7
+    },
+    "progress_bar": {
+      "type": "boolean",
+      "description": "Show a playback progress bar on all tiles.",
+      "default": true
+    },
+    "progress_bar_position": {
+      "type": "string",
+      "enum": ["top", "bottom"],
+      "description": "Position of the progress bar.",
+      "default": "top"
+    },
+    "tracks": {
+      "type": "array",
+      "description": "List of tracks to render.",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/track"
+      }
+    }
+  },
+  "$defs": {
+    "color": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^#?[0-9a-fA-F]{6}$",
+          "examples": ["#bf9856", "#ffffff"]
+        },
+        {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "minItems": 3,
+          "maxItems": 3,
+          "examples": [[191, 152, 86]]
+        },
+        { "type": "null" }
+      ]
+    },
+    "timecode": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Timecode as M:SS or M:SS.mm",
+          "examples": ["1:36", "2:22.50"]
+        },
+        {
+          "type": "number",
+          "description": "Offset in seconds",
+          "minimum": 0,
+          "examples": [96.0]
+        },
+        { "type": "null" }
+      ]
+    },
+    "track": {
+      "type": "object",
+      "required": ["audio"],
+      "additionalProperties": false,
+      "properties": {
+        "audio": {
+          "type": "string",
+          "description": "Audio filename relative to the release folder.",
+          "examples": ["Logic Moon - Clockwork_02.wav"]
+        },
+        "image": {
+          "type": ["string", "null"],
+          "description": "Cover image filename. Falls back to cover.png if omitted.",
+          "examples": ["cover.jpg"]
+        },
+        "headline": {
+          "type": "string",
+          "description": "Small uppercase label displayed above the track title.",
+          "examples": ["OUT NOW", "AVAILABLE NOW"]
+        },
+        "title": {
+          "type": ["string", "null"],
+          "description": "Track title. Parsed from the filename if null.",
+          "examples": ["Clockwork"]
+        },
+        "copy": {
+          "type": "string",
+          "description": "Small text line displayed below the title.",
+          "examples": ["Available on all platforms"]
+        },
+        "start": {
+          "$ref": "#/$defs/timecode",
+          "description": "Clip start position. Defaults to the center of the track."
+        },
+        "accent_color": {
+          "$ref": "#/$defs/color",
+          "description": "Per-track accent color override. Inherits EP-level value if null."
+        },
+        "font_color": {
+          "$ref": "#/$defs/color",
+          "description": "Per-track font color override. Inherits EP-level value if null."
+        },
+        "font": {
+          "type": ["string", "null"],
+          "description": "Per-track font path override. Inherits EP-level value if null."
+        },
+        "overlay_color": {
+          "$ref": "#/$defs/color",
+          "description": "Per-track overlay color override. Inherits EP-level value if null."
+        },
+        "overlay_opacity": {
+          "type": ["number", "null"],
+          "description": "Per-track overlay opacity override. Inherits EP-level value if null.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    }
+  }
+}

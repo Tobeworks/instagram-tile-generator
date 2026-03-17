@@ -1,4 +1,4 @@
-# insta-tile-generator
+# instagram-tile-generator
 
 Generate Instagram-ready MP4 tiles from audio tracks and cover art. Each tile combines a full-bleed cover image, an animated waveform, and a text overlay (headline, track title, optional copy). Output is exported as MP4 (feed or Reels format) or as static PNGs for carousel posts.
 
@@ -38,8 +38,11 @@ data/
     └── config.json             # optional — see below
 export/
 └── my-release/
-    ├── track_01.mp4
-    ├── track_02.mp4
+    ├── square/
+    │   ├── track_01.mp4
+    │   └── track_02.mp4
+    ├── reel/
+    │   └── track_01.mp4
     └── carousel/
         ├── 01_track_01.png
         └── 02_track_02.png
@@ -104,29 +107,40 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 
 ### `--init` details
 
-`--init` scans `data_dir` for `.wav` files and writes a fully pre-filled `config.json`. All fields are included with sensible defaults (`null` / `false`), ready to edit:
+`--init` scans `data_dir` for `.wav` files and writes a fully pre-filled `config.json`. All fields are included with sensible defaults, ready to edit:
 - `start` is pre-calculated as the center of each track based on `--duration`
-- `accent_color` and `font` are set to `null` at both EP and track level
+- `accent_color` is auto-detected from the cover image and written as an editable hex value
+- All per-track overrides (`font`, `font_color`, `overlay_color`, `overlay_opacity`, `accent_color`) are included as `null`, ready to uncomment
+- A `$schema` reference to `config.schema.json` is added for IDE autocompletion
 
 ## config.json
 
 ```json
 {
-  "ep_title":      "My Release",
-  "clip_duration": 30,
-  "accent_color":  null,
-  "font":          null,
-  "progress_bar":  false,
+  "$schema":               "../../config.schema.json",
+  "ep_title":              "My Release",
+  "clip_duration":         30,
+  "accent_color":          "#e8a020",
+  "font_color":            null,
+  "font":                  null,
+  "format":                "square",
+  "overlay_color":         "#000000",
+  "overlay_opacity":       0.7,
+  "progress_bar":          true,
+  "progress_bar_position": "top",
   "tracks": [
     {
-      "audio":        "track-01.wav",
-      "image":        "cover.png",
-      "headline":     "OUT NOW",
-      "title":        "Track Title",
-      "copy":         "Optional copy text shown below the title",
-      "start":        "1:23",
-      "accent_color": null,
-      "font":         null
+      "audio":           "track-01.wav",
+      "image":           "cover.png",
+      "headline":        "OUT NOW",
+      "title":           "Track Title",
+      "copy":            "Optional copy text shown below the title",
+      "start":           "1:23",
+      "accent_color":    null,
+      "font_color":      null,
+      "font":            null,
+      "overlay_color":   null,
+      "overlay_opacity": null
     }
   ]
 }
@@ -148,7 +162,7 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `format` | `"square"` | Default output format: `"square"`, `"reel"`, or `"carousel"` |
 | `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
 | `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
-| `progress_bar` | `false` | Show playback progress bar on all tiles |
+| `progress_bar` | `true` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
 
 **Per-track fields**
@@ -169,13 +183,17 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 
 ## Output
 
-Rendered files are written to `./export/<release-name>/`.
+Rendered files are written to `./export/<release-name>/<format>/`.
 
 | Format | Path | Resolution |
 |---|---|---|
-| `square` | `export/<release>/track.mp4` | 1080×1080 |
-| `reel` | `export/<release>/track.mp4` | 1080×1920 |
+| `square` | `export/<release>/square/track.mp4` | 1080×1080 |
+| `reel` | `export/<release>/reel/track.mp4` | 1080×1920 |
 | `carousel` | `export/<release>/carousel/01_track.png` | 1080×1080 |
-| `--preview` | `export/<release>/track_preview.png` | format-dependent |
+| `--preview` | `export/<release>/<format>/track_preview.png` | format-dependent |
 
 The 1080×1080 canvas uses 160 px of horizontal padding, keeping all content within the safe zone that remains visible when Instagram crops to 4:5.
+
+## JSON Schema
+
+`config.schema.json` at the project root describes every field in `config.json`. Editors that support JSON Schema (VS Code, JetBrains, etc.) will show autocompletion and inline documentation when the `$schema` key is present — which `--init` adds automatically.
