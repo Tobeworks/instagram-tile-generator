@@ -2,6 +2,8 @@
 
 Generate Instagram-ready MP4 tiles from audio tracks and cover art. Each tile combines a full-bleed cover image, an animated waveform, and a text overlay (headline, track title, optional copy). Output is exported as MP4 (feed or Reels format) or as static PNGs for carousel posts.
 
+![Demo](docs/demo.jpg)
+
 ## Features
 
 - Animated waveform derived from the audio signal
