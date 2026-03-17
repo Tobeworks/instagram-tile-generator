@@ -94,6 +94,8 @@ python generate.py <data_dir> [options]
 | `--progress-bar-position` | `top` (default) or `bottom` |
 | `--accent-color COLOR` | Accent color as `#rrggbb` or `r,g,b`. Overrides config and auto-extraction. |
 | `--font-color COLOR` | Text color for title and copy as `#rrggbb` or `r,g,b`. Default: white. |
+| `--overlay-color COLOR` | Gradient overlay color as `#rrggbb` or `r,g,b`. Default: `#000000`. |
+| `--overlay-opacity N` | Gradient overlay strength `0.0`–`1.0`. Default: `0.7`. |
 | `--font PATH` | Path to a `.ttf` font file. Overrides `config.json` and system font. |
 
 ### Without a config.json
@@ -144,6 +146,8 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `font_color` | `null` | Text color for title and copy. Hex or RGB array. Default: white. |
 | `font` | `null` | Path to a `.ttf` font file |
 | `format` | `"square"` | Default output format: `"square"`, `"reel"`, or `"carousel"` |
+| `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
+| `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
 | `progress_bar` | `false` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
 
@@ -157,6 +161,8 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `title` | no | Track title. Parsed from filename if omitted |
 | `copy` | no | Small text line below the title |
 | `start` | no | Clip start as `M:SS` or seconds. Default: center of track |
+| `overlay_color` | no | Override EP-level overlay color for this track only |
+| `overlay_opacity` | no | Override EP-level overlay opacity for this track only |
 | `accent_color` | no | Override EP-level accent color for this track only |
 | `font_color` | no | Override EP-level font color for this track only |
 | `font` | no | Override EP-level font for this track only |

@@ -26,7 +26,7 @@ FPS             = 24
 N_BARS          = 60
 MAX_BAR_HEIGHT  = 120
 BAR_GAP         = 4
-OVERLAY_ALPHA   = 180
+OVERLAY_ALPHA_DEFAULT   = 180  # ~0.7 opacity
 
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
@@ -105,17 +105,20 @@ def resolve_start_time(audio_path: Path, clip_duration, explicit_start) -> float
 
 
 def _track_dict(audio, image, headline="", title=None, copy="", start=None,
-                accent_color=None, font=None, font_color=None):
+                accent_color=None, font=None, font_color=None,
+                overlay_color=None, overlay_opacity=None):
     return {
-        "audio":        audio,
-        "image":        image,
-        "headline":     headline,
-        "title":        title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
-        "copy":         copy,
-        "start":        parse_timecode(start),
-        "accent_color": parse_color(accent_color),
-        "font":         font,
-        "font_color":   parse_color(font_color),
+        "audio":           audio,
+        "image":           image,
+        "headline":        headline,
+        "title":           title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
+        "copy":            copy,
+        "start":           parse_timecode(start),
+        "accent_color":    parse_color(accent_color),
+        "font":            font,
+        "font_color":      parse_color(font_color),
+        "overlay_color":   parse_color(overlay_color),
+        "overlay_opacity": float(overlay_opacity) if overlay_opacity is not None else None,
     }
 
 
@@ -172,19 +175,23 @@ def load_config(data_dir: Path):
             "progress_bar":          cfg.get("progress_bar", True),
             "progress_bar_position": cfg.get("progress_bar_position", "top"),
             "accent_color":          parse_color(cfg.get("accent_color", None)),
+            "overlay_color":         parse_color(cfg.get("overlay_color", None)),
+            "overlay_opacity":       cfg.get("overlay_opacity", None),
             "format":                cfg.get("format", None),
         }
         tracks = [
             _track_dict(
-                audio        = data_dir / t["audio"],
-                image        = data_dir / t.get("image", "cover.png"),
-                headline     = t.get("headline", ""),
-                title        = t.get("title", parse_track_title(t["audio"])),
-                copy         = t.get("copy", ""),
-                start        = t.get("start", None),
-                accent_color = t.get("accent_color", None),
-                font         = t.get("font", None),
-                font_color   = t.get("font_color", None),
+                audio           = data_dir / t["audio"],
+                image           = data_dir / t.get("image", "cover.png"),
+                headline        = t.get("headline", ""),
+                title           = t.get("title", parse_track_title(t["audio"])),
+                copy            = t.get("copy", ""),
+                start           = t.get("start", None),
+                accent_color    = t.get("accent_color", None),
+                font            = t.get("font", None),
+                font_color      = t.get("font_color", None),
+                overlay_color   = t.get("overlay_color", None),
+                overlay_opacity = t.get("overlay_opacity", None),
             )
             for t in cfg.get("tracks", [])
         ]
@@ -232,19 +239,23 @@ def generate_config(data_dir: Path, clip_duration_default=30):
             "title":        parse_track_title(wav.name),
             "copy":         "",
             "start":        format_timecode(auto_start),
-            "accent_color": None,
-            "font_color":   None,
-            "font":         None,
+            "accent_color":    None,
+            "font_color":      None,
+            "font":            None,
+            "overlay_color":   None,
+            "overlay_opacity": None,
         })
         print(f"  {wav.name}: {total:.1f}s  →  start={format_timecode(auto_start)}")
 
     cfg = {
         "ep_title":      data_dir.name.replace("-", " ").title(),
         "clip_duration": clip_duration_default,
-        "accent_color":          accent_hex,
-        "font_color":            None,
-        "font":                  None,
-        "format":                "square",
+        "accent_color":    accent_hex,
+        "font_color":      None,
+        "font":            None,
+        "format":          "square",
+        "overlay_color":   "#000000",
+        "overlay_opacity": 0.7,
         "progress_bar":          False,
         "progress_bar_position": "top",
         "tracks":                tracks,
@@ -302,9 +313,12 @@ def _crop_and_resize(img: Image.Image, w: int, h: int) -> Image.Image:
 
 def render_frame(image_path, bar_heights, text_config, size,
                  accent_color=None, font_color=None,
+                 overlay_color=None, overlay_opacity=None,
                  progress=None, progress_bar_top=True, font_path=None):
     w, h = size
     ac = accent_color or (255, 255, 255)
+    oc = overlay_color or (0, 0, 0)
+    max_alpha = int((overlay_opacity if overlay_opacity is not None else 0.7) * 255)
 
     if image_path and Path(image_path).exists():
         img = _crop_and_resize(Image.open(image_path).convert("RGB"), w, h)
@@ -316,7 +330,7 @@ def render_frame(image_path, bar_heights, text_config, size,
     gradient_top = int(h * 0.25)
     for y_pos in range(gradient_top, h):
         p = (y_pos - gradient_top) / (h - gradient_top)
-        draw_ov.line([(0, y_pos), (w, y_pos)], fill=(0, 0, 0, int(OVERLAY_ALPHA * (p ** 2.8))))
+        draw_ov.line([(0, y_pos), (w, y_pos)], fill=(*oc, int(max_alpha * (p ** 2.8))))
 
     frame = Image.alpha_composite(img.convert("RGBA"), overlay)
     draw = ImageDraw.Draw(frame)
@@ -390,31 +404,47 @@ def resolve_font_color(track, ep_font_color=None, cli_font_color=None):
     """Return font color: CLI > per-track config > EP config > None (default white)."""
     return cli_font_color or track.get("font_color") or ep_font_color or None
 
+
+def resolve_overlay(track, ep_overlay_color=None, ep_overlay_opacity=None,
+                    cli_overlay_color=None, cli_overlay_opacity=None):
+    """Return (overlay_color, overlay_opacity): CLI > per-track > EP > None (defaults in render_frame)."""
+    color   = cli_overlay_color   or track.get("overlay_color")   or ep_overlay_color   or None
+    opacity = cli_overlay_opacity or track.get("overlay_opacity") or ep_overlay_opacity or None
+    return color, opacity
+
 def save_preview(track, export_dir: Path, fmt: str, ep_accent=None, ep_font=None,
-                 ep_font_color=None, cli_accent=None, cli_font=None, cli_font_color=None,
-                 progress_bar_top=True):
+                 ep_font_color=None, ep_overlay_color=None, ep_overlay_opacity=None,
+                 cli_accent=None, cli_font=None, cli_font_color=None,
+                 cli_overlay_color=None, cli_overlay_opacity=None, **_):
     size = FORMATS["square" if fmt == "carousel" else fmt]
     bars = np.full(N_BARS, 0.4)
     bars[N_BARS // 4: 3 * N_BARS // 4] = 0.8
+    ov_color, ov_opacity = resolve_overlay(track, ep_overlay_color, ep_overlay_opacity,
+                                           cli_overlay_color, cli_overlay_opacity)
     out_path = export_dir / f"{slugify(track['title'])}_preview.png"
     render_frame(track["image"], bars, track, size,
                  accent_color=resolve_accent(track, ep_accent, cli_accent),
                  font_color=resolve_font_color(track, ep_font_color, cli_font_color),
+                 overlay_color=ov_color, overlay_opacity=ov_opacity,
                  font_path=resolve_font(track, ep_font, cli_font)).save(out_path)
     print(f"  Preview saved: {out_path}")
 
 
 def save_carousel_slide(track, index, carousel_dir: Path, force=False,
                         ep_accent=None, ep_font=None, ep_font_color=None,
+                        ep_overlay_color=None, ep_overlay_opacity=None,
                         cli_accent=None, cli_font=None, cli_font_color=None,
-                        progress_bar_top=True):
+                        cli_overlay_color=None, cli_overlay_opacity=None, **_):
     out_path = carousel_dir / f"{index:02d}_{slugify(track['title'])}.png"
     if out_path.exists() and not force:
         print(f"  Skipping (exists): {out_path.name}  —  use --force to overwrite")
         return
+    ov_color, ov_opacity = resolve_overlay(track, ep_overlay_color, ep_overlay_opacity,
+                                           cli_overlay_color, cli_overlay_opacity)
     render_frame(track["image"], None, track, FORMATS["carousel"],
                  accent_color=resolve_accent(track, ep_accent, cli_accent),
                  font_color=resolve_font_color(track, ep_font_color, cli_font_color),
+                 overlay_color=ov_color, overlay_opacity=ov_opacity,
                  font_path=resolve_font(track, ep_font, cli_font)).save(out_path)
     print(f"  Carousel slide saved: {out_path}")
 
@@ -422,7 +452,9 @@ def save_carousel_slide(track, index, carousel_dir: Path, force=False,
 def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_start,
                  force=False, show_progress_bar=False,
                  ep_accent=None, ep_font=None, ep_font_color=None,
+                 ep_overlay_color=None, ep_overlay_opacity=None,
                  cli_accent=None, cli_font=None, cli_font_color=None,
+                 cli_overlay_color=None, cli_overlay_opacity=None,
                  progress_bar_top=True):
     from moviepy import VideoClip, AudioFileClip
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut  # type: ignore
@@ -438,9 +470,11 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
         audio_path, clip_duration,
         explicit_start if explicit_start is not None else track.get("start"),
     )
-    accent     = resolve_accent(track, ep_accent, cli_accent)
-    font_color = resolve_font_color(track, ep_font_color, cli_font_color)
-    font_path  = resolve_font(track, ep_font, cli_font)
+    accent              = resolve_accent(track, ep_accent, cli_accent)
+    font_color          = resolve_font_color(track, ep_font_color, cli_font_color)
+    font_path           = resolve_font(track, ep_font, cli_font)
+    ov_color, ov_opacity = resolve_overlay(track, ep_overlay_color, ep_overlay_opacity,
+                                            cli_overlay_color, cli_overlay_opacity)
 
     print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
     waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
@@ -453,6 +487,7 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
         return np.array(render_frame(
             track["image"], waveform_frames[fi], track, size,
             accent_color=accent, font_color=font_color,
+            overlay_color=ov_color, overlay_opacity=ov_opacity,
             progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
         ))
 
@@ -502,6 +537,10 @@ def main():
     parser.add_argument("--font-color", type=str, default=None, dest="font_color",
                         help="Text color for title and copy as hex '#ffffff' or '255,255,255'. "
                              "Default: white.")
+    parser.add_argument("--overlay-color", type=str, default=None, dest="overlay_color",
+                        help="Gradient overlay color as hex or r,g,b. Default: #000000.")
+    parser.add_argument("--overlay-opacity", type=float, default=None, dest="overlay_opacity",
+                        help="Gradient overlay strength 0.0–1.0. Default: 0.7.")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir).resolve()
@@ -534,8 +573,12 @@ def main():
             return None
         return parse_color([int(x) for x in raw.split(",")] if "," in raw else raw)
 
-    cli_accent     = _parse_cli_color(args.accent_color)
-    cli_font_color = _parse_cli_color(args.font_color)
+    cli_accent          = _parse_cli_color(args.accent_color)
+    cli_font_color      = _parse_cli_color(args.font_color)
+    cli_overlay_color   = _parse_cli_color(args.overlay_color)
+    cli_overlay_opacity = args.overlay_opacity
+    ep_overlay_color    = extras.get("overlay_color") or None
+    ep_overlay_opacity  = extras.get("overlay_opacity")
 
     project_root = Path(__file__).parent
     export_dir = project_root / "export" / ep_name / ("carousel" if output_format == "carousel" else "")
@@ -566,7 +609,9 @@ def main():
             print("  WARNING: audio file not found, skipping.")
             continue
         kwargs = dict(ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
+                      ep_overlay_color=ep_overlay_color, ep_overlay_opacity=ep_overlay_opacity,
                       cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
+                      cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
                       progress_bar_top=progress_bar_top)
         if args.preview:
             save_preview(track, export_dir.parent if output_format == "carousel" else export_dir,
