@@ -67,12 +67,17 @@
     },
     "typewriter_headline": {
       "type": "boolean",
-      "description": "Animate the headline with a typewriter effect (characters appear one by one).",
+      "description": "Fade in the headline at the start of the clip.",
+      "default": false
+    },
+    "typewriter_title": {
+      "type": "boolean",
+      "description": "Animate the track title with a typewriter effect (characters appear one by one).",
       "default": false
     },
     "typewriter_copy": {
       "type": "boolean",
-      "description": "Animate the copy text with a typewriter effect, starting after the headline finishes.",
+      "description": "Fade in the copy text after the title finishes.",
       "default": false
     },
     "tracks": {
@@ -180,11 +185,15 @@
         },
         "typewriter_headline": {
           "type": ["boolean", "null"],
-          "description": "Per-track typewriter override for the headline. Inherits EP-level value if null."
+          "description": "Per-track fade-in override for the headline. Inherits EP-level value if null."
+        },
+        "typewriter_title": {
+          "type": ["boolean", "null"],
+          "description": "Per-track typewriter override for the title. Inherits EP-level value if null."
         },
         "typewriter_copy": {
           "type": ["boolean", "null"],
-          "description": "Per-track typewriter override for the copy text. Inherits EP-level value if null."
+          "description": "Per-track fade-in override for the copy text. Inherits EP-level value if null."
         }
       }
     }

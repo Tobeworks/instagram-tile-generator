@@ -27,7 +27,8 @@ N_BARS          = 60
 MAX_BAR_HEIGHT  = 120
 BAR_GAP         = 4
 OVERLAY_ALPHA_DEFAULT   = 180  # ~0.7 opacity
-TW_CHARS_PER_SEC = 20          # typewriter speed
+TW_CHARS_PER_SEC  = 20         # typewriter speed (chars/s)
+TW_FADE_DURATION  = 0.5        # fade-in duration (s) for headline / copy
 
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ def resolve_start_time(audio_path: Path, clip_duration, explicit_start) -> float
 def _track_dict(audio, image, headline="", title=None, copy="", start=None,
                 accent_color=None, font=None, font_color=None,
                 overlay_color=None, overlay_opacity=None,
-                typewriter_headline=None, typewriter_copy=None,
+                typewriter_headline=None, typewriter_title=None, typewriter_copy=None,
                 progress_bar_color=None):
     return {
         "audio":               audio,
@@ -160,6 +161,7 @@ def _track_dict(audio, image, headline="", title=None, copy="", start=None,
         "overlay_color":       parse_color(overlay_color),
         "overlay_opacity":     float(overlay_opacity) if overlay_opacity is not None else None,
         "typewriter_headline": typewriter_headline,
+        "typewriter_title":    typewriter_title,
         "typewriter_copy":     typewriter_copy,
         "progress_bar_color":  parse_color(progress_bar_color),
     }
@@ -222,6 +224,7 @@ def load_config(data_dir: Path):
             "overlay_opacity":       cfg.get("overlay_opacity", None),
             "format":                cfg.get("format", None),
             "typewriter_headline":   cfg.get("typewriter_headline", False),
+            "typewriter_title":      cfg.get("typewriter_title", False),
             "typewriter_copy":       cfg.get("typewriter_copy", False),
             "progress_bar_color":    parse_color(cfg.get("progress_bar_color", None)),
         }
@@ -239,6 +242,7 @@ def load_config(data_dir: Path):
                 overlay_color        = t.get("overlay_color", None),
                 overlay_opacity      = t.get("overlay_opacity", None),
                 typewriter_headline  = t.get("typewriter_headline", None),
+                typewriter_title     = t.get("typewriter_title", None),
                 typewriter_copy      = t.get("typewriter_copy", None),
                 progress_bar_color   = t.get("progress_bar_color", None),
             )
@@ -294,6 +298,7 @@ def generate_config(data_dir: Path, clip_duration_default=30):
             "overlay_color":      None,
             "overlay_opacity":    None,
             "typewriter_headline": None,
+            "typewriter_title":    None,
             "typewriter_copy":     None,
             "progress_bar_color":  None,
         })
@@ -319,6 +324,7 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         "progress_bar_position": "top",
         "progress_bar_color":    None,
         "typewriter_headline":   False,
+        "typewriter_title":      False,
         "typewriter_copy":       False,
         "tracks":                tracks,
     }
@@ -374,17 +380,25 @@ def _crop_and_resize(img: Image.Image, w: int, h: int) -> Image.Image:
 
 
 def _tw_visible(text, t, start_t):
-    """Return the visible portion of text at time t for a typewriter effect."""
+    """Characters revealed so far for a typewriter effect."""
     if t is None or t < start_t:
         return ""
     return text[:max(0, int((t - start_t) * TW_CHARS_PER_SEC))]
+
+
+def _fade_alpha(t, start_t, duration=TW_FADE_DURATION):
+    """0.0→1.0 ramp for a fade-in effect."""
+    if t is None or t < start_t:
+        return 0.0
+    return min(1.0, (t - start_t) / duration)
 
 
 def render_frame(image_path, bar_heights, text_config, size,
                  accent_color=None, font_color=None,
                  overlay_color=None, overlay_opacity=None,
                  progress=None, progress_bar_top=True, font_path=None,
-                 typewriter_t=None, typewriter_headline=False, typewriter_copy=False,
+                 typewriter_t=None,
+                 typewriter_headline=False, typewriter_title=False, typewriter_copy=False,
                  progress_bar_color=None):
     w, h = size
     ac = accent_color or (255, 255, 255)
@@ -430,46 +444,51 @@ def render_frame(image_path, bar_heights, text_config, size,
     font_copy     = get_font(26, font_path=font_path)
 
     headline_full = text_config.get("headline", "")
+    title_full    = text_config.get("title", "")
     copy_full     = text_config.get("copy", "")
 
-    # typewriter timing: headline starts at 0.4s, copy after headline finishes
-    tw_headline_start = 0.4
-    tw_copy_start     = tw_headline_start + (len(headline_full) / TW_CHARS_PER_SEC if typewriter_headline else 0) + 0.3
+    # animation timing chain
+    t = typewriter_t
+    headline_start  = 0.3
+    headline_done   = headline_start + (TW_FADE_DURATION if typewriter_headline and headline_full else 0)
+    title_tw_start  = headline_done  + (0.2             if typewriter_title    and title_full    else 0)
+    title_done      = title_tw_start + (len(title_full) / TW_CHARS_PER_SEC if typewriter_title  else 0)
+    copy_start      = title_done     + (0.2             if typewriter_copy     and copy_full     else 0)
 
-    headline_visible = _tw_visible(headline_full, typewriter_t, tw_headline_start) if typewriter_headline else headline_full
-    copy_visible     = _tw_visible(copy_full,     typewriter_t, tw_copy_start)     if typewriter_copy     else copy_full
+    def headline_alpha(): return _fade_alpha(t, headline_start) if typewriter_headline else 1.0
+    def title_alpha():    return 1.0  # title is typewriter, always fully opaque once visible
+    def copy_alpha():     return _fade_alpha(t, copy_start)     if typewriter_copy     else 1.0
 
-    # layout uses full text so position stays stable while characters appear
+    title_visible = _tw_visible(title_full, t, title_tw_start) if typewriter_title else title_full
+
+    # build blocks — always include if full text exists so layout stays stable
     blocks = []
     if headline_full:
-        blocks.append(("headline", headline_visible, font_headline, 22))
-    if text_config.get("title"):
-        blocks.append(("title",    text_config["title"], font_title,    58))
+        blocks.append(("headline", headline_full.upper(), font_headline, headline_full, headline_alpha()))
+    if title_full:
+        blocks.append(("title",    title_visible,          font_title,   title_full,    title_alpha()))
     if copy_full:
-        blocks.append(("copy",     copy_visible,    font_copy,     26))
+        blocks.append(("copy",     copy_full,              font_copy,    copy_full,     copy_alpha()))
 
-    full_blocks = []
-    if headline_full:
-        full_blocks.append(("headline", headline_full, font_headline, 22))
-    if text_config.get("title"):
-        full_blocks.append(("title",    text_config["title"], font_title, 58))
-    if copy_full:
-        full_blocks.append(("copy",     copy_full,    font_copy,     26))
-
-    total_text_h = sum(fs for _, _, _, fs in full_blocks) + 12 * (len(full_blocks) - 1)
+    # anchor layout to full text so nothing shifts during animation
+    total_text_h = sum(draw.textbbox((0, 0), full, font=font)[3] for _, _, font, full, _ in blocks)
+    total_text_h += 12 * (len(blocks) - 1)
     text_y = h - 80 - total_text_h
 
     fc = font_color or (255, 255, 255)
-    colors = {
+    base_colors = {
         "headline": (*ac, 230),
         "title":    (*fc, 255),
         "copy":     (int(fc[0]*0.75), int(fc[1]*0.75), int(fc[2]*0.75), 200),
     }
-    for kind, text, font, _ in blocks:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        x = max(PADDING_X, (w - (bbox[2] - bbox[0])) // 2)
-        draw.text((x, text_y), text.upper() if kind == "headline" else text, font=font, fill=colors[kind])
-        text_y += draw.textbbox((0, 0), text, font=font)[3] + 12
+    for kind, text, font, full_text, alpha in blocks:
+        if text:
+            r, g, b, a = base_colors[kind]
+            color = (r, g, b, int(a * alpha))
+            bbox = draw.textbbox((0, 0), text, font=font)
+            x = max(PADDING_X, (w - (bbox[2] - bbox[0])) // 2)
+            draw.text((x, text_y), text, font=font, fill=color)
+        text_y += draw.textbbox((0, 0), full_text, font=font)[3] + 12
 
     return frame.convert("RGB")
 
@@ -547,7 +566,7 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
                  cli_accent=None, cli_font=None, cli_font_color=None,
                  cli_overlay_color=None, cli_overlay_opacity=None,
                  progress_bar_top=True,
-                 ep_typewriter_headline=False, ep_typewriter_copy=False,
+                 ep_typewriter_headline=False, ep_typewriter_title=False, ep_typewriter_copy=False,
                  ep_progress_bar_color=None):
     from moviepy import VideoClip, AudioFileClip
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut  # type: ignore
@@ -568,8 +587,9 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
     font_path           = resolve_font(track, ep_font, cli_font)
     ov_color, ov_opacity = resolve_overlay(track, ep_overlay_color, ep_overlay_opacity,
                                             cli_overlay_color, cli_overlay_opacity)
-    tw_headline     = track.get("typewriter_headline") if track.get("typewriter_headline") is not None else ep_typewriter_headline
-    tw_copy         = track.get("typewriter_copy")     if track.get("typewriter_copy")     is not None else ep_typewriter_copy
+    tw_headline = track.get("typewriter_headline") if track.get("typewriter_headline") is not None else ep_typewriter_headline
+    tw_title    = track.get("typewriter_title")    if track.get("typewriter_title")    is not None else ep_typewriter_title
+    tw_copy     = track.get("typewriter_copy")     if track.get("typewriter_copy")     is not None else ep_typewriter_copy
     pb_color        = track.get("progress_bar_color")  or ep_progress_bar_color or None
 
     print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
@@ -585,7 +605,7 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
             accent_color=accent, font_color=font_color,
             overlay_color=ov_color, overlay_opacity=ov_opacity,
             progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
-            typewriter_t=t, typewriter_headline=tw_headline, typewriter_copy=tw_copy,
+            typewriter_t=t, typewriter_headline=tw_headline, typewriter_title=tw_title, typewriter_copy=tw_copy,
             progress_bar_color=pb_color,
         ))
 
@@ -679,6 +699,7 @@ def main():
     ep_overlay_color      = extras.get("overlay_color") or None
     ep_overlay_opacity    = extras.get("overlay_opacity")
     ep_typewriter_headline = extras.get("typewriter_headline", False)
+    ep_typewriter_title    = extras.get("typewriter_title", False)
     ep_typewriter_copy     = extras.get("typewriter_copy", False)
     ep_progress_bar_color  = extras.get("progress_bar_color") or None
 
@@ -708,6 +729,7 @@ def main():
                   cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
                   progress_bar_top=progress_bar_top,
                   ep_typewriter_headline=ep_typewriter_headline,
+                  ep_typewriter_title=ep_typewriter_title,
                   ep_typewriter_copy=ep_typewriter_copy,
                   ep_progress_bar_color=ep_progress_bar_color)
 

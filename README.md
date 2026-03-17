@@ -167,8 +167,9 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `progress_bar` | `true` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
 | `progress_bar_color` | `null` | Color of the progress bar background track. Hex or RGB array. Default: white. |
-| `typewriter_headline` | `false` | Animate headline with a typewriter effect |
-| `typewriter_copy` | `false` | Animate copy text with a typewriter effect (starts after headline) |
+| `typewriter_headline` | `false` | Fade in the headline at the start of the clip |
+| `typewriter_title` | `false` | Animate the track title with a typewriter effect |
+| `typewriter_copy` | `false` | Fade in the copy text after the title finishes |
 
 **Per-track fields**
 
@@ -186,8 +187,9 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `font_color` | no | Override EP-level font color for this track only |
 | `font` | no | Override EP-level font (name or path) for this track only |
 | `progress_bar_color` | no | Override EP-level progress bar background color for this track only |
-| `typewriter_headline` | no | Override EP-level typewriter setting for the headline |
-| `typewriter_copy` | no | Override EP-level typewriter setting for the copy text |
+| `typewriter_headline` | no | Override EP-level headline fade-in for this track |
+| `typewriter_title` | no | Override EP-level title typewriter for this track |
+| `typewriter_copy` | no | Override EP-level copy fade-in for this track |
 
 ## Output
 
