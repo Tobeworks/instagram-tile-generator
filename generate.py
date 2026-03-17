@@ -481,15 +481,21 @@ def render_frame(image_path, bar_heights, text_config, size,
         "title":    (*fc, 255),
         "copy":     (int(fc[0]*0.75), int(fc[1]*0.75), int(fc[2]*0.75), 200),
     }
+    # Draw text onto a separate RGBA layer so alpha fades composite correctly.
+    # draw.text() on an RGBA image does direct pixel writes — convert("RGB") then
+    # drops the alpha, making text visible even at alpha=0. alpha_composite fixes this.
+    text_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw_text  = ImageDraw.Draw(text_layer)
     for kind, text, font, full_text, alpha in blocks:
-        if text:
+        if text and alpha > 0:
             r, g, b, a = base_colors[kind]
             color = (r, g, b, int(a * alpha))
             bbox = draw.textbbox((0, 0), text, font=font)
             x = max(PADDING_X, (w - (bbox[2] - bbox[0])) // 2)
-            draw.text((x, text_y), text, font=font, fill=color)
+            draw_text.text((x, text_y), text, font=font, fill=color)
         text_y += draw.textbbox((0, 0), full_text, font=font)[3] + 12
 
+    frame = Image.alpha_composite(frame, text_layer)
     return frame.convert("RGB")
 
 
