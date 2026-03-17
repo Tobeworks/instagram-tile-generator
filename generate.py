@@ -4,6 +4,7 @@ insta-tile-generator — turn audio + cover art into Instagram-ready MP4 tiles.
 """
 
 import argparse
+import colorsys
 import json
 import os
 import re
@@ -20,18 +21,17 @@ FORMATS = {
     "carousel": (1080, 1080),
 }
 
-PADDING_X        = 160
-FPS              = 24
-N_BARS           = 60
-MAX_BAR_HEIGHT   = 120
-BAR_GAP          = 4
-WAVEFORM_COLOR   = (255, 255, 255, 200)
-OVERLAY_ALPHA    = 180
+PADDING_X       = 160
+FPS             = 24
+N_BARS          = 60
+MAX_BAR_HEIGHT  = 120
+BAR_GAP         = 4
+OVERLAY_ALPHA   = 180
 
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
 
-def _find_font(bold=False):
+def _find_system_font(bold=False):
     candidates = (
         [
             "/System/Library/Fonts/Helvetica.ttc",
@@ -47,8 +47,8 @@ def _find_font(bold=False):
     return next((p for p in candidates if os.path.exists(p)), None)
 
 
-def get_font(size, bold=False):
-    path = _find_font(bold)
+def get_font(size, bold=False, font_path=None):
+    path = font_path or _find_system_font(bold)
     if path:
         try:
             return ImageFont.truetype(path, size)
@@ -104,15 +104,57 @@ def resolve_start_time(audio_path: Path, clip_duration, explicit_start) -> float
     return 0.0
 
 
-def _track_dict(audio, image, headline="", title=None, copy="", start=None):
+def _track_dict(audio, image, headline="", title=None, copy="", start=None,
+                accent_color=None, font=None, font_color=None):
     return {
-        "audio":    audio,
-        "image":    image,
-        "headline": headline,
-        "title":    title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
-        "copy":     copy,
-        "start":    parse_timecode(start),
+        "audio":        audio,
+        "image":        image,
+        "headline":     headline,
+        "title":        title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
+        "copy":         copy,
+        "start":        parse_timecode(start),
+        "accent_color": parse_color(accent_color),
+        "font":         font,
+        "font_color":   parse_color(font_color),
     }
+
+
+# ── Dominant color ────────────────────────────────────────────────────────────
+
+def parse_color(value) -> tuple:
+    """Parse a color value into an (r, g, b) tuple.
+    Accepts: '#ff6b35', 'ff6b35', [255, 107, 53], or (255, 107, 53).
+    Returns None if value is None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        return tuple(int(c) for c in value)
+    hex_str = str(value).strip().lstrip("#")
+    if len(hex_str) == 6:
+        return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    raise ValueError(f"Cannot parse color: {value!r}  (use '#rrggbb' or [r, g, b])")
+
+
+def get_dominant_color(image_path) -> tuple:
+    """Extract the most vibrant dominant color from an image."""
+    if not image_path or not Path(image_path).exists():
+        return (255, 255, 255)
+    img = Image.open(image_path).convert("RGB").resize((100, 100))
+    quantized = img.quantize(colors=8)
+    palette = quantized.getpalette()
+    colors = [(palette[i * 3], palette[i * 3 + 1], palette[i * 3 + 2]) for i in range(8)]
+
+    def vibrance(rgb):
+        h, s, v = colorsys.rgb_to_hsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
+        return s * v
+
+    r, g, b = max(colors, key=vibrance)
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    s = max(s, 0.55)
+    v = max(v, 0.75)
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (int(r * 255), int(g * 255), int(b * 255))
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -124,30 +166,40 @@ def load_config(data_dir: Path):
             cfg = json.load(f)
         ep_name = slugify(cfg.get("ep_title", data_dir.name))
         clip_duration = cfg.get("clip_duration", None)
+        extras = {
+            "font":                  cfg.get("font", None),
+            "font_color":            parse_color(cfg.get("font_color", None)),
+            "progress_bar":          cfg.get("progress_bar", True),
+            "progress_bar_position": cfg.get("progress_bar_position", "top"),
+            "accent_color":          parse_color(cfg.get("accent_color", None)),
+            "format":                cfg.get("format", None),
+        }
         tracks = [
             _track_dict(
-                audio    = data_dir / t["audio"],
-                image    = data_dir / t.get("image", "cover.png"),
-                headline = t.get("headline", ""),
-                title    = t.get("title", parse_track_title(t["audio"])),
-                copy     = t.get("copy", ""),
-                start    = t.get("start", None),
+                audio        = data_dir / t["audio"],
+                image        = data_dir / t.get("image", "cover.png"),
+                headline     = t.get("headline", ""),
+                title        = t.get("title", parse_track_title(t["audio"])),
+                copy         = t.get("copy", ""),
+                start        = t.get("start", None),
+                accent_color = t.get("accent_color", None),
+                font         = t.get("font", None),
+                font_color   = t.get("font_color", None),
             )
             for t in cfg.get("tracks", [])
         ]
-        return ep_name, clip_duration, tracks
+        return ep_name, clip_duration, tracks, extras
 
     ep_name = slugify(data_dir.name)
     covers = list(data_dir.glob("cover.*"))
     cover = covers[0] if covers else None
-
     wav_files = sorted(data_dir.glob("*.wav"))
     if not wav_files:
         print(f"No WAV files found in {data_dir}", file=sys.stderr)
         sys.exit(1)
 
     tracks = [_track_dict(audio=wav, image=cover) for wav in wav_files]
-    return ep_name, None, tracks
+    return ep_name, None, tracks, {}
 
 
 def generate_config(data_dir: Path, clip_duration_default=30):
@@ -158,6 +210,11 @@ def generate_config(data_dir: Path, clip_duration_default=30):
 
     covers = list(data_dir.glob("cover.*"))
     cover_name = covers[0].name if covers else "cover.png"
+    cover_path = covers[0] if covers else None
+
+    auto_accent = get_dominant_color(cover_path)
+    accent_hex  = "#{:02x}{:02x}{:02x}".format(*auto_accent)
+    print(f"  Detected accent color: {accent_hex}  (from {cover_name})")
 
     wav_files = sorted(data_dir.glob("*.wav"))
     if not wav_files:
@@ -169,19 +226,28 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         total = get_audio_duration(wav)
         auto_start = max(0.0, (total - clip_duration_default) / 2)
         tracks.append({
-            "audio":    wav.name,
-            "image":    cover_name,
-            "headline": "",
-            "title":    parse_track_title(wav.name),
-            "copy":     "",
-            "start":    format_timecode(auto_start),
+            "audio":        wav.name,
+            "image":        cover_name,
+            "headline":     "",
+            "title":        parse_track_title(wav.name),
+            "copy":         "",
+            "start":        format_timecode(auto_start),
+            "accent_color": None,
+            "font_color":   None,
+            "font":         None,
         })
         print(f"  {wav.name}: {total:.1f}s  →  start={format_timecode(auto_start)}")
 
     cfg = {
         "ep_title":      data_dir.name.replace("-", " ").title(),
         "clip_duration": clip_duration_default,
-        "tracks":        tracks,
+        "accent_color":          accent_hex,
+        "font_color":            None,
+        "font":                  None,
+        "format":                "square",
+        "progress_bar":          False,
+        "progress_bar_position": "top",
+        "tracks":                tracks,
     }
     with open(config_path, "w") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -234,8 +300,11 @@ def _crop_and_resize(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.resize((w, h), Image.LANCZOS)
 
 
-def render_frame(image_path, bar_heights, text_config, size):
+def render_frame(image_path, bar_heights, text_config, size,
+                 accent_color=None, font_color=None,
+                 progress=None, progress_bar_top=True, font_path=None):
     w, h = size
+    ac = accent_color or (255, 255, 255)
 
     if image_path and Path(image_path).exists():
         img = _crop_and_resize(Image.open(image_path).convert("RGB"), w, h)
@@ -246,8 +315,8 @@ def render_frame(image_path, bar_heights, text_config, size):
     draw_ov = ImageDraw.Draw(overlay)
     gradient_top = int(h * 0.25)
     for y_pos in range(gradient_top, h):
-        progress = (y_pos - gradient_top) / (h - gradient_top)
-        draw_ov.line([(0, y_pos), (w, y_pos)], fill=(0, 0, 0, int(OVERLAY_ALPHA * (progress ** 2.8))))
+        p = (y_pos - gradient_top) / (h - gradient_top)
+        draw_ov.line([(0, y_pos), (w, y_pos)], fill=(0, 0, 0, int(OVERLAY_ALPHA * (p ** 2.8))))
 
     frame = Image.alpha_composite(img.convert("RGBA"), overlay)
     draw = ImageDraw.Draw(frame)
@@ -257,14 +326,22 @@ def render_frame(image_path, bar_heights, text_config, size):
         total_bar_w = N_BARS * bar_w + (N_BARS - 1) * BAR_GAP
         x0 = (w - total_bar_w) // 2
         cy = int(h * 0.52)
+        waveform_fill = (*ac, 200)
         for i, height_norm in enumerate(bar_heights):
             bh = max(3, int(height_norm * MAX_BAR_HEIGHT))
             x = x0 + i * (bar_w + BAR_GAP)
-            draw.rectangle([x, cy - bh, x + bar_w, cy + bh], fill=WAVEFORM_COLOR)
+            draw.rectangle([x, cy - bh, x + bar_w, cy + bh], fill=waveform_fill)
 
-    font_headline = get_font(22)
-    font_title    = get_font(58, bold=True)
-    font_copy     = get_font(26)
+    if progress is not None:
+        bar_h = 5
+        bar_y = 20 if progress_bar_top else h - 28
+        draw.rectangle([0, bar_y, w, bar_y + bar_h], fill=(255, 255, 255, 40))
+        if progress > 0:
+            draw.rectangle([0, bar_y, int(w * progress), bar_y + bar_h], fill=(*ac, 220))
+
+    font_headline = get_font(22, font_path=font_path)
+    font_title    = get_font(58, bold=True, font_path=font_path)
+    font_copy     = get_font(26, font_path=font_path)
 
     blocks = []
     if text_config.get("headline"):
@@ -277,7 +354,12 @@ def render_frame(image_path, bar_heights, text_config, size):
     total_text_h = sum(fs for _, _, _, fs in blocks) + 12 * (len(blocks) - 1)
     text_y = h - 80 - total_text_h
 
-    colors = {"headline": (200, 200, 200, 220), "title": (255, 255, 255, 255), "copy": (180, 180, 180, 200)}
+    fc = font_color or (255, 255, 255)
+    colors = {
+        "headline": (*ac, 230),
+        "title":    (*fc, 255),
+        "copy":     (int(fc[0]*0.75), int(fc[1]*0.75), int(fc[2]*0.75), 200),
+    }
     for kind, text, font, _ in blocks:
         bbox = draw.textbbox((0, 0), text, font=font)
         x = max(PADDING_X, (w - (bbox[2] - bbox[0])) // 2)
@@ -289,24 +371,66 @@ def render_frame(image_path, bar_heights, text_config, size):
 
 # ── Output ────────────────────────────────────────────────────────────────────
 
-def save_preview(track, export_dir: Path, fmt: str):
+def resolve_accent(track, ep_accent=None, cli_accent=None) -> tuple:
+    """Return accent color: CLI > per-track config > EP config > auto-extracted."""
+    return (
+        cli_accent
+        or track.get("accent_color")
+        or ep_accent
+        or get_dominant_color(track["image"])
+    )
+
+
+def resolve_font(track, ep_font=None, cli_font=None):
+    """Return font path: CLI > per-track config > EP config > None (system font)."""
+    return cli_font or track.get("font") or ep_font or None
+
+
+def resolve_font_color(track, ep_font_color=None, cli_font_color=None):
+    """Return font color: CLI > per-track config > EP config > None (default white)."""
+    return cli_font_color or track.get("font_color") or ep_font_color or None
+
+def save_preview(track, export_dir: Path, fmt: str, ep_accent=None, ep_font=None,
+                 ep_font_color=None, cli_accent=None, cli_font=None, cli_font_color=None,
+                 progress_bar_top=True):
     size = FORMATS["square" if fmt == "carousel" else fmt]
     bars = np.full(N_BARS, 0.4)
     bars[N_BARS // 4: 3 * N_BARS // 4] = 0.8
     out_path = export_dir / f"{slugify(track['title'])}_preview.png"
-    render_frame(track["image"], bars, track, size).save(out_path)
+    render_frame(track["image"], bars, track, size,
+                 accent_color=resolve_accent(track, ep_accent, cli_accent),
+                 font_color=resolve_font_color(track, ep_font_color, cli_font_color),
+                 font_path=resolve_font(track, ep_font, cli_font)).save(out_path)
     print(f"  Preview saved: {out_path}")
 
 
-def save_carousel_slide(track, index, carousel_dir: Path):
+def save_carousel_slide(track, index, carousel_dir: Path, force=False,
+                        ep_accent=None, ep_font=None, ep_font_color=None,
+                        cli_accent=None, cli_font=None, cli_font_color=None,
+                        progress_bar_top=True):
     out_path = carousel_dir / f"{index:02d}_{slugify(track['title'])}.png"
-    render_frame(track["image"], None, track, FORMATS["carousel"]).save(out_path)
+    if out_path.exists() and not force:
+        print(f"  Skipping (exists): {out_path.name}  —  use --force to overwrite")
+        return
+    render_frame(track["image"], None, track, FORMATS["carousel"],
+                 accent_color=resolve_accent(track, ep_accent, cli_accent),
+                 font_color=resolve_font_color(track, ep_font_color, cli_font_color),
+                 font_path=resolve_font(track, ep_font, cli_font)).save(out_path)
     print(f"  Carousel slide saved: {out_path}")
 
 
-def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_start):
+def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_start,
+                 force=False, show_progress_bar=False,
+                 ep_accent=None, ep_font=None, ep_font_color=None,
+                 cli_accent=None, cli_font=None, cli_font_color=None,
+                 progress_bar_top=True):
     from moviepy import VideoClip, AudioFileClip
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut  # type: ignore
+
+    out_path = export_dir / f"{slugify(track['title'])}.mp4"
+    if out_path.exists() and not force:
+        print(f"  Skipping (exists): {out_path.name}  —  use --force to overwrite")
+        return
 
     size = FORMATS[fmt]
     audio_path = track["audio"]
@@ -314,6 +438,9 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
         audio_path, clip_duration,
         explicit_start if explicit_start is not None else track.get("start"),
     )
+    accent     = resolve_accent(track, ep_accent, cli_accent)
+    font_color = resolve_font_color(track, ep_font_color, cli_font_color)
+    font_path  = resolve_font(track, ep_font, cli_font)
 
     print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
     waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
@@ -322,7 +449,12 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
 
     def make_frame(t):
         fi = min(int(t * FPS), n_frames - 1)
-        return np.array(render_frame(track["image"], waveform_frames[fi], track, size))
+        progress = (t / actual_duration) if show_progress_bar else None
+        return np.array(render_frame(
+            track["image"], waveform_frames[fi], track, size,
+            accent_color=accent, font_color=font_color,
+            progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
+        ))
 
     print(f"  Rendering {actual_duration:.1f}s at {FPS}fps ({n_frames} frames)...")
     video = VideoClip(make_frame, duration=actual_duration)
@@ -332,7 +464,6 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
     audio = audio.with_effects([AudioFadeIn(1.5), AudioFadeOut(1.5)])
     video = video.with_audio(audio)
 
-    out_path = export_dir / f"{slugify(track['title'])}.mp4"
     video.write_videofile(str(out_path), fps=FPS, codec="libx264", audio_codec="aac", logger=None)
     print(f"  Video saved: {out_path}")
 
@@ -356,6 +487,21 @@ def main():
                         help="square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs (default: square)")
     parser.add_argument("--preview", action="store_true",
                         help="Render a static PNG preview per track, skip MP4 encoding")
+    parser.add_argument("--force", action="store_true",
+                        help="Overwrite existing output files")
+    parser.add_argument("--progress-bar", action="store_true",
+                        help="Show an audio progress bar (default position: top)")
+    parser.add_argument("--progress-bar-position", choices=["top", "bottom"], default=None,
+                        dest="progress_bar_position",
+                        help="Position of the progress bar: top (default) or bottom")
+    parser.add_argument("--font", type=str, default=None,
+                        help="Path to a .ttf font file to use instead of the system font")
+    parser.add_argument("--accent-color", type=str, default=None, dest="accent_color",
+                        help="Accent color as hex '#ff6b35' or comma-separated RGB '255,107,53'. "
+                             "Overrides config.json and auto-extraction.")
+    parser.add_argument("--font-color", type=str, default=None, dest="font_color",
+                        help="Text color for title and copy as hex '#ffffff' or '255,255,255'. "
+                             "Default: white.")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir).resolve()
@@ -368,34 +514,68 @@ def main():
         generate_config(data_dir, clip_duration_default=int(args.duration or 30))
         sys.exit(0)
 
-    ep_name, json_duration, tracks = load_config(data_dir)
-    clip_duration  = args.duration or json_duration
-    explicit_start = parse_timecode(args.start)
+    ep_name, json_duration, tracks, extras = load_config(data_dir)
+    clip_duration   = args.duration or json_duration
+    output_format   = args.format or extras.get("format") or "square"
+    if output_format not in FORMATS:
+        print(f"Error: invalid format '{output_format}' in config.json (use square, reel, carousel)", file=sys.stderr)
+        sys.exit(1)
+    explicit_start  = parse_timecode(args.start)
+    show_progress    = args.progress_bar or extras.get("progress_bar", False)
+    pb_position      = args.progress_bar_position or extras.get("progress_bar_position", "top")
+    progress_bar_top = pb_position != "bottom"
+    ep_font          = extras.get("font") or None
+    ep_font_color    = extras.get("font_color") or None
+    ep_accent        = extras.get("accent_color") or None
+    cli_font         = args.font or None
+
+    def _parse_cli_color(raw):
+        if not raw:
+            return None
+        return parse_color([int(x) for x in raw.split(",")] if "," in raw else raw)
+
+    cli_accent     = _parse_cli_color(args.accent_color)
+    cli_font_color = _parse_cli_color(args.font_color)
 
     project_root = Path(__file__).parent
-    export_dir = project_root / "export" / ep_name / ("carousel" if args.format == "carousel" else "")
+    export_dir = project_root / "export" / ep_name / ("carousel" if output_format == "carousel" else "")
     export_dir = export_dir.resolve()
     export_dir.mkdir(parents=True, exist_ok=True)
 
-    mode = "preview" if args.preview else args.format
-    print(f"\n  release : {ep_name}")
-    print(f"  format  : {args.format}  |  mode: {mode}")
+    mode = "preview" if args.preview else output_format
+    print(f"\n  release     : {ep_name}")
+    print(f"  format      : {output_format}  |  mode: {mode}")
     if clip_duration:
-        print(f"  duration: {clip_duration}s")
-    print(f"  tracks  : {len(tracks)}")
-    print(f"  output  : {export_dir}\n")
+        print(f"  duration    : {clip_duration}s")
+    if cli_font or ep_font:
+        print(f"  font        : {cli_font or ep_font}")
+    if cli_accent or ep_accent:
+        ac = cli_accent or ep_accent
+        print(f"  accent      : #{ac[0]:02x}{ac[1]:02x}{ac[2]:02x}")
+    if cli_font_color or ep_font_color:
+        fc = cli_font_color or ep_font_color
+        print(f"  font color  : #{fc[0]:02x}{fc[1]:02x}{fc[2]:02x}")
+    print(f"  progress bar: {'on' if show_progress else 'off'}")
+    print(f"  force       : {'on' if args.force else 'off'}")
+    print(f"  tracks      : {len(tracks)}")
+    print(f"  output      : {export_dir}\n")
 
     for i, track in enumerate(tracks, 1):
         print(f"[{i}/{len(tracks)}] {track['title']}")
         if not track["audio"] or not Path(track["audio"]).exists():
             print("  WARNING: audio file not found, skipping.")
             continue
+        kwargs = dict(ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
+                      cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
+                      progress_bar_top=progress_bar_top)
         if args.preview:
-            save_preview(track, export_dir.parent if args.format == "carousel" else export_dir, args.format)
-        elif args.format == "carousel":
-            save_carousel_slide(track, i, export_dir)
+            save_preview(track, export_dir.parent if output_format == "carousel" else export_dir,
+                         output_format, **kwargs)
+        elif output_format == "carousel":
+            save_carousel_slide(track, i, export_dir, force=args.force, **kwargs)
         else:
-            create_video(track, export_dir, args.format, clip_duration, explicit_start)
+            create_video(track, export_dir, output_format, clip_duration, explicit_start,
+                         force=args.force, show_progress_bar=show_progress, **kwargs)
 
     print("\nDone.")
 
