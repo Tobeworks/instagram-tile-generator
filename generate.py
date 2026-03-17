@@ -525,7 +525,7 @@ def main():
                         help="Clip length in seconds (overrides config.json)")
     parser.add_argument("--start", type=str, default=None,
                         help="Clip start time: '1:23' or '83'. Default: center of track")
-    parser.add_argument("--format", choices=["square", "reel", "carousel"], default="square",
+    parser.add_argument("--format", choices=["square", "reel", "carousel"], default=None,
                         help="square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs (default: square)")
     parser.add_argument("--preview", action="store_true",
                         help="Render a static PNG preview per track, skip MP4 encoding")
