@@ -61,6 +61,20 @@
       "description": "Position of the progress bar.",
       "default": "top"
     },
+    "progress_bar_color": {
+      "$ref": "#/$defs/color",
+      "description": "Color of the progress bar background track. Defaults to white if null."
+    },
+    "typewriter_headline": {
+      "type": "boolean",
+      "description": "Animate the headline with a typewriter effect (characters appear one by one).",
+      "default": false
+    },
+    "typewriter_copy": {
+      "type": "boolean",
+      "description": "Animate the copy text with a typewriter effect, starting after the headline finishes.",
+      "default": false
+    },
     "tracks": {
       "type": "array",
       "description": "List of tracks to render.",
@@ -159,6 +173,18 @@
           "description": "Per-track overlay opacity override. Inherits EP-level value if null.",
           "minimum": 0.0,
           "maximum": 1.0
+        },
+        "progress_bar_color": {
+          "$ref": "#/$defs/color",
+          "description": "Per-track progress bar background color override. Inherits EP-level value if null."
+        },
+        "typewriter_headline": {
+          "type": ["boolean", "null"],
+          "description": "Per-track typewriter override for the headline. Inherits EP-level value if null."
+        },
+        "typewriter_copy": {
+          "type": ["boolean", "null"],
+          "description": "Per-track typewriter override for the copy text. Inherits EP-level value if null."
         }
       }
     }

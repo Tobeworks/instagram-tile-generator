@@ -27,9 +27,38 @@ N_BARS          = 60
 MAX_BAR_HEIGHT  = 120
 BAR_GAP         = 4
 OVERLAY_ALPHA_DEFAULT   = 180  # ~0.7 opacity
+TW_CHARS_PER_SEC = 20          # typewriter speed
 
 
 # ── Fonts ─────────────────────────────────────────────────────────────────────
+
+_FONT_SEARCH_DIRS = [
+    Path.home() / "Library/Fonts",
+    Path("/Library/Fonts"),
+    Path("/System/Library/Fonts"),
+    Path("/usr/share/fonts"),
+]
+_BOLD_HINTS    = {"bold", "black", "heavy", "semibold", "extrabold"}
+_REGULAR_HINTS = {"regular", "medium", "text", "roman", "book"}
+
+
+def find_font_by_name(name: str, bold: bool = False):
+    """Scan system font directories for a font matching `name` (case-insensitive)."""
+    import itertools
+    clean = lambda s: s.lower().replace(" ", "").replace("-", "").replace("_", "")
+    name_clean = clean(name)
+    candidates = []
+    for d in _FONT_SEARCH_DIRS:
+        if d.exists():
+            for f in itertools.chain(d.rglob("*.ttf"), d.rglob("*.otf")):
+                if name_clean in clean(f.stem):
+                    candidates.append(f)
+    if not candidates:
+        return None
+    hints = _BOLD_HINTS if bold else _REGULAR_HINTS
+    preferred = [f for f in candidates if any(h in f.stem.lower() for h in hints)]
+    return str((preferred or candidates)[0])
+
 
 def _find_system_font(bold=False):
     candidates = (
@@ -48,7 +77,16 @@ def _find_system_font(bold=False):
 
 
 def get_font(size, bold=False, font_path=None):
-    path = font_path or _find_system_font(bold)
+    path = font_path
+    if path and not Path(path).exists():
+        # treat as font name — search installed fonts
+        resolved = find_font_by_name(path, bold=bold)
+        if resolved:
+            path = resolved
+        else:
+            print(f"  WARNING: font '{path}' not found — falling back to system font", file=sys.stderr)
+            path = None
+    path = path or _find_system_font(bold)
     if path:
         try:
             return ImageFont.truetype(path, size)
@@ -106,19 +144,24 @@ def resolve_start_time(audio_path: Path, clip_duration, explicit_start) -> float
 
 def _track_dict(audio, image, headline="", title=None, copy="", start=None,
                 accent_color=None, font=None, font_color=None,
-                overlay_color=None, overlay_opacity=None):
+                overlay_color=None, overlay_opacity=None,
+                typewriter_headline=None, typewriter_copy=None,
+                progress_bar_color=None):
     return {
-        "audio":           audio,
-        "image":           image,
-        "headline":        headline,
-        "title":           title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
-        "copy":            copy,
-        "start":           parse_timecode(start),
-        "accent_color":    parse_color(accent_color),
-        "font":            font,
-        "font_color":      parse_color(font_color),
-        "overlay_color":   parse_color(overlay_color),
-        "overlay_opacity": float(overlay_opacity) if overlay_opacity is not None else None,
+        "audio":               audio,
+        "image":               image,
+        "headline":            headline,
+        "title":               title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
+        "copy":                copy,
+        "start":               parse_timecode(start),
+        "accent_color":        parse_color(accent_color),
+        "font":                font,
+        "font_color":          parse_color(font_color),
+        "overlay_color":       parse_color(overlay_color),
+        "overlay_opacity":     float(overlay_opacity) if overlay_opacity is not None else None,
+        "typewriter_headline": typewriter_headline,
+        "typewriter_copy":     typewriter_copy,
+        "progress_bar_color":  parse_color(progress_bar_color),
     }
 
 
@@ -178,6 +221,9 @@ def load_config(data_dir: Path):
             "overlay_color":         parse_color(cfg.get("overlay_color", None)),
             "overlay_opacity":       cfg.get("overlay_opacity", None),
             "format":                cfg.get("format", None),
+            "typewriter_headline":   cfg.get("typewriter_headline", False),
+            "typewriter_copy":       cfg.get("typewriter_copy", False),
+            "progress_bar_color":    parse_color(cfg.get("progress_bar_color", None)),
         }
         tracks = [
             _track_dict(
@@ -187,11 +233,14 @@ def load_config(data_dir: Path):
                 title           = t.get("title", parse_track_title(t["audio"])),
                 copy            = t.get("copy", ""),
                 start           = t.get("start", None),
-                accent_color    = t.get("accent_color", None),
-                font            = t.get("font", None),
-                font_color      = t.get("font_color", None),
-                overlay_color   = t.get("overlay_color", None),
-                overlay_opacity = t.get("overlay_opacity", None),
+                accent_color         = t.get("accent_color", None),
+                font                 = t.get("font", None),
+                font_color           = t.get("font_color", None),
+                overlay_color        = t.get("overlay_color", None),
+                overlay_opacity      = t.get("overlay_opacity", None),
+                typewriter_headline  = t.get("typewriter_headline", None),
+                typewriter_copy      = t.get("typewriter_copy", None),
+                progress_bar_color   = t.get("progress_bar_color", None),
             )
             for t in cfg.get("tracks", [])
         ]
@@ -233,17 +282,20 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         total = get_audio_duration(wav)
         auto_start = max(0.0, (total - clip_duration_default) / 2)
         tracks.append({
-            "audio":        wav.name,
-            "image":        cover_name,
-            "headline":     "",
-            "title":        parse_track_title(wav.name),
-            "copy":         "",
-            "start":        format_timecode(auto_start),
-            "accent_color":    None,
-            "font_color":      None,
-            "font":            None,
-            "overlay_color":   None,
-            "overlay_opacity": None,
+            "audio":              wav.name,
+            "image":              cover_name,
+            "headline":           "",
+            "title":              parse_track_title(wav.name),
+            "copy":               "",
+            "start":              format_timecode(auto_start),
+            "accent_color":       None,
+            "font_color":         None,
+            "font":               None,
+            "overlay_color":      None,
+            "overlay_opacity":    None,
+            "typewriter_headline": None,
+            "typewriter_copy":     None,
+            "progress_bar_color":  None,
         })
         print(f"  {wav.name}: {total:.1f}s  →  start={format_timecode(auto_start)}")
 
@@ -265,6 +317,9 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         "overlay_opacity": 0.7,
         "progress_bar":          True,
         "progress_bar_position": "top",
+        "progress_bar_color":    None,
+        "typewriter_headline":   False,
+        "typewriter_copy":       False,
         "tracks":                tracks,
     }
     with open(config_path, "w") as f:
@@ -318,10 +373,19 @@ def _crop_and_resize(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.resize((w, h), Image.LANCZOS)
 
 
+def _tw_visible(text, t, start_t):
+    """Return the visible portion of text at time t for a typewriter effect."""
+    if t is None or t < start_t:
+        return ""
+    return text[:max(0, int((t - start_t) * TW_CHARS_PER_SEC))]
+
+
 def render_frame(image_path, bar_heights, text_config, size,
                  accent_color=None, font_color=None,
                  overlay_color=None, overlay_opacity=None,
-                 progress=None, progress_bar_top=True, font_path=None):
+                 progress=None, progress_bar_top=True, font_path=None,
+                 typewriter_t=None, typewriter_headline=False, typewriter_copy=False,
+                 progress_bar_color=None):
     w, h = size
     ac = accent_color or (255, 255, 255)
     oc = overlay_color or (0, 0, 0)
@@ -356,7 +420,8 @@ def render_frame(image_path, bar_heights, text_config, size,
     if progress is not None:
         bar_h = 5
         bar_y = 20 if progress_bar_top else h - 28
-        draw.rectangle([0, bar_y, w, bar_y + bar_h], fill=(*ac, 60))
+        pbc = progress_bar_color or (255, 255, 255)
+        draw.rectangle([0, bar_y, w, bar_y + bar_h], fill=(*pbc, 60))
         if progress > 0:
             draw.rectangle([0, bar_y, int(w * progress), bar_y + bar_h], fill=(*ac, 220))
 
@@ -364,15 +429,34 @@ def render_frame(image_path, bar_heights, text_config, size,
     font_title    = get_font(58, bold=True, font_path=font_path)
     font_copy     = get_font(26, font_path=font_path)
 
-    blocks = []
-    if text_config.get("headline"):
-        blocks.append(("headline", text_config["headline"], font_headline, 22))
-    if text_config.get("title"):
-        blocks.append(("title",    text_config["title"],    font_title,    58))
-    if text_config.get("copy"):
-        blocks.append(("copy",     text_config["copy"],     font_copy,     26))
+    headline_full = text_config.get("headline", "")
+    copy_full     = text_config.get("copy", "")
 
-    total_text_h = sum(fs for _, _, _, fs in blocks) + 12 * (len(blocks) - 1)
+    # typewriter timing: headline starts at 0.4s, copy after headline finishes
+    tw_headline_start = 0.4
+    tw_copy_start     = tw_headline_start + (len(headline_full) / TW_CHARS_PER_SEC if typewriter_headline else 0) + 0.3
+
+    headline_visible = _tw_visible(headline_full, typewriter_t, tw_headline_start) if typewriter_headline else headline_full
+    copy_visible     = _tw_visible(copy_full,     typewriter_t, tw_copy_start)     if typewriter_copy     else copy_full
+
+    # layout uses full text so position stays stable while characters appear
+    blocks = []
+    if headline_full:
+        blocks.append(("headline", headline_visible, font_headline, 22))
+    if text_config.get("title"):
+        blocks.append(("title",    text_config["title"], font_title,    58))
+    if copy_full:
+        blocks.append(("copy",     copy_visible,    font_copy,     26))
+
+    full_blocks = []
+    if headline_full:
+        full_blocks.append(("headline", headline_full, font_headline, 22))
+    if text_config.get("title"):
+        full_blocks.append(("title",    text_config["title"], font_title, 58))
+    if copy_full:
+        full_blocks.append(("copy",     copy_full,    font_copy,     26))
+
+    total_text_h = sum(fs for _, _, _, fs in full_blocks) + 12 * (len(full_blocks) - 1)
     text_y = h - 80 - total_text_h
 
     fc = font_color or (255, 255, 255)
@@ -462,7 +546,9 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
                  ep_overlay_color=None, ep_overlay_opacity=None,
                  cli_accent=None, cli_font=None, cli_font_color=None,
                  cli_overlay_color=None, cli_overlay_opacity=None,
-                 progress_bar_top=True):
+                 progress_bar_top=True,
+                 ep_typewriter_headline=False, ep_typewriter_copy=False,
+                 ep_progress_bar_color=None):
     from moviepy import VideoClip, AudioFileClip
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut  # type: ignore
 
@@ -482,6 +568,9 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
     font_path           = resolve_font(track, ep_font, cli_font)
     ov_color, ov_opacity = resolve_overlay(track, ep_overlay_color, ep_overlay_opacity,
                                             cli_overlay_color, cli_overlay_opacity)
+    tw_headline     = track.get("typewriter_headline") if track.get("typewriter_headline") is not None else ep_typewriter_headline
+    tw_copy         = track.get("typewriter_copy")     if track.get("typewriter_copy")     is not None else ep_typewriter_copy
+    pb_color        = track.get("progress_bar_color")  or ep_progress_bar_color or None
 
     print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
     waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
@@ -496,6 +585,8 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
             accent_color=accent, font_color=font_color,
             overlay_color=ov_color, overlay_opacity=ov_opacity,
             progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
+            typewriter_t=t, typewriter_headline=tw_headline, typewriter_copy=tw_copy,
+            progress_bar_color=pb_color,
         ))
 
     print(f"  Rendering {actual_duration:.1f}s at {FPS}fps ({n_frames} frames)...")
@@ -584,8 +675,11 @@ def main():
     cli_font_color      = _parse_cli_color(args.font_color)
     cli_overlay_color   = _parse_cli_color(args.overlay_color)
     cli_overlay_opacity = args.overlay_opacity
-    ep_overlay_color    = extras.get("overlay_color") or None
-    ep_overlay_opacity  = extras.get("overlay_opacity")
+    ep_overlay_color      = extras.get("overlay_color") or None
+    ep_overlay_opacity    = extras.get("overlay_opacity")
+    ep_typewriter_headline = extras.get("typewriter_headline", False)
+    ep_typewriter_copy     = extras.get("typewriter_copy", False)
+    ep_progress_bar_color  = extras.get("progress_bar_color") or None
 
     project_root = Path(__file__).parent
     export_dir = (project_root / "export" / ep_name / output_format).resolve()
@@ -618,7 +712,10 @@ def main():
                       ep_overlay_color=ep_overlay_color, ep_overlay_opacity=ep_overlay_opacity,
                       cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
                       cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
-                      progress_bar_top=progress_bar_top)
+                      progress_bar_top=progress_bar_top,
+                      ep_typewriter_headline=ep_typewriter_headline,
+                      ep_typewriter_copy=ep_typewriter_copy,
+                      ep_progress_bar_color=ep_progress_bar_color)
         if args.preview:
             save_preview(track, export_dir, output_format, **kwargs)
         elif output_format == "carousel":

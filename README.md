@@ -99,7 +99,7 @@ python generate.py <data_dir> [options]
 | `--font-color COLOR` | Text color for title and copy as `#rrggbb` or `r,g,b`. Default: white. |
 | `--overlay-color COLOR` | Gradient overlay color as `#rrggbb` or `r,g,b`. Default: `#000000`. |
 | `--overlay-opacity N` | Gradient overlay strength `0.0`–`1.0`. Default: `0.7`. |
-| `--font PATH` | Path to a `.ttf` font file. Overrides `config.json` and system font. |
+| `--font NAME_OR_PATH` | Font name (e.g. `"Inter"`) or path to a `.ttf`/`.otf` file. Overrides `config.json` and system font. |
 
 ### Without a config.json
 
@@ -158,12 +158,15 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `clip_duration` | full track | Default clip length in seconds |
 | `accent_color` | `null` | Accent color for waveform and headline. Hex or RGB array. |
 | `font_color` | `null` | Text color for title and copy. Hex or RGB array. Default: white. |
-| `font` | `null` | Path to a `.ttf` font file |
+| `font` | `null` | Font name (e.g. `"Inter"`) or path to a `.ttf`/`.otf` file |
 | `format` | `"square"` | Default output format: `"square"`, `"reel"`, or `"carousel"` |
 | `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
 | `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
 | `progress_bar` | `true` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
+| `progress_bar_color` | `null` | Color of the progress bar background track. Hex or RGB array. Default: white. |
+| `typewriter_headline` | `false` | Animate headline with a typewriter effect |
+| `typewriter_copy` | `false` | Animate copy text with a typewriter effect (starts after headline) |
 
 **Per-track fields**
 
@@ -179,7 +182,10 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `overlay_opacity` | no | Override EP-level overlay opacity for this track only |
 | `accent_color` | no | Override EP-level accent color for this track only |
 | `font_color` | no | Override EP-level font color for this track only |
-| `font` | no | Override EP-level font for this track only |
+| `font` | no | Override EP-level font (name or path) for this track only |
+| `progress_bar_color` | no | Override EP-level progress bar background color for this track only |
+| `typewriter_headline` | no | Override EP-level typewriter setting for the headline |
+| `typewriter_copy` | no | Override EP-level typewriter setting for the copy text |
 
 ## Output
 
