@@ -616,8 +616,8 @@ def main():
                         help="Clip length in seconds (overrides config.json)")
     parser.add_argument("--start", type=str, default=None,
                         help="Clip start time: '1:23' or '83'. Default: center of track")
-    parser.add_argument("--format", choices=["square", "reel", "carousel"], default=None,
-                        help="square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs (default: square)")
+    parser.add_argument("--format", choices=["square", "reel", "carousel", "all"], default=None,
+                        help="square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs, all=every format (default: square)")
     parser.add_argument("--preview", action="store_true",
                         help="Render a static PNG preview per track, skip MP4 encoding")
     parser.add_argument("--force", action="store_true",
@@ -654,9 +654,10 @@ def main():
     ep_name, json_duration, tracks, extras = load_config(data_dir)
     clip_duration   = args.duration or json_duration
     output_format   = args.format or extras.get("format") or "square"
-    if output_format not in FORMATS:
-        print(f"Error: invalid format '{output_format}' in config.json (use square, reel, carousel)", file=sys.stderr)
+    if output_format not in {*FORMATS, "all"}:
+        print(f"Error: invalid format '{output_format}' in config.json (use square, reel, carousel, all)", file=sys.stderr)
         sys.exit(1)
+    active_formats = list(FORMATS.keys()) if output_format == "all" else [output_format]
     explicit_start  = parse_timecode(args.start)
     show_progress    = args.progress_bar or extras.get("progress_bar", False)
     pb_position      = args.progress_bar_position or extras.get("progress_bar_position", "top")
@@ -682,8 +683,6 @@ def main():
     ep_progress_bar_color  = extras.get("progress_bar_color") or None
 
     project_root = Path(__file__).parent
-    export_dir = (project_root / "export" / ep_name / output_format).resolve()
-    export_dir.mkdir(parents=True, exist_ok=True)
 
     mode = "preview" if args.preview else output_format
     print(f"\n  release     : {ep_name}")
@@ -701,28 +700,35 @@ def main():
     print(f"  progress bar: {'on' if show_progress else 'off'}")
     print(f"  force       : {'on' if args.force else 'off'}")
     print(f"  tracks      : {len(tracks)}")
-    print(f"  output      : {export_dir}\n")
+    print()
 
-    for i, track in enumerate(tracks, 1):
-        print(f"[{i}/{len(tracks)}] {track['title']}")
-        if not track["audio"] or not Path(track["audio"]).exists():
-            print("  WARNING: audio file not found, skipping.")
-            continue
-        kwargs = dict(ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
-                      ep_overlay_color=ep_overlay_color, ep_overlay_opacity=ep_overlay_opacity,
-                      cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
-                      cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
-                      progress_bar_top=progress_bar_top,
-                      ep_typewriter_headline=ep_typewriter_headline,
-                      ep_typewriter_copy=ep_typewriter_copy,
-                      ep_progress_bar_color=ep_progress_bar_color)
-        if args.preview:
-            save_preview(track, export_dir, output_format, **kwargs)
-        elif output_format == "carousel":
-            save_carousel_slide(track, i, export_dir, force=args.force, **kwargs)
-        else:
-            create_video(track, export_dir, output_format, clip_duration, explicit_start,
-                         force=args.force, show_progress_bar=show_progress, **kwargs)
+    kwargs = dict(ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
+                  ep_overlay_color=ep_overlay_color, ep_overlay_opacity=ep_overlay_opacity,
+                  cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
+                  cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,
+                  progress_bar_top=progress_bar_top,
+                  ep_typewriter_headline=ep_typewriter_headline,
+                  ep_typewriter_copy=ep_typewriter_copy,
+                  ep_progress_bar_color=ep_progress_bar_color)
+
+    for fmt in active_formats:
+        export_dir = (project_root / "export" / ep_name / fmt).resolve()
+        export_dir.mkdir(parents=True, exist_ok=True)
+        if len(active_formats) > 1:
+            print(f"── {fmt} ──────────────────────────────")
+
+        for i, track in enumerate(tracks, 1):
+            print(f"[{i}/{len(tracks)}] {track['title']}")
+            if not track["audio"] or not Path(track["audio"]).exists():
+                print("  WARNING: audio file not found, skipping.")
+                continue
+            if args.preview:
+                save_preview(track, export_dir, fmt, **kwargs)
+            elif fmt == "carousel":
+                save_carousel_slide(track, i, export_dir, force=args.force, **kwargs)
+            else:
+                create_video(track, export_dir, fmt, clip_duration, explicit_start,
+                             force=args.force, show_progress_bar=show_progress, **kwargs)
 
     print("\nDone.")
 

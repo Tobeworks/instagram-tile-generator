@@ -35,8 +35,8 @@
     },
     "format": {
       "type": "string",
-      "enum": ["square", "reel", "carousel"],
-      "description": "Default output format. square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs.",
+      "enum": ["square", "reel", "carousel", "all"],
+      "description": "Default output format. square=1080×1080 MP4, reel=1080×1920 MP4, carousel=static PNGs, all=every format.",
       "default": "square"
     },
     "overlay_color": {

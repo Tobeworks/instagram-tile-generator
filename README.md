@@ -92,7 +92,7 @@ python generate.py <data_dir> [options]
 | `--init` | Scan `data_dir` and write a `config.json` skeleton, then exit |
 | `--duration SECS` | Clip length in seconds. Overrides `config.json`. |
 | `--start TIME` | Clip start time as `M:SS` or seconds, e.g. `1:23` or `83`. Overrides `config.json` per-track values. Default: center of track. |
-| `--format FORMAT` | `square` (1080×1080, default), `reel` (1080×1920), `carousel` (static PNGs) |
+| `--format FORMAT` | `square` (1080×1080, default), `reel` (1080×1920), `carousel` (static PNGs), `all` (every format) |
 | `--preview` | Render a static PNG preview per track instead of encoding MP4 |
 | `--force` | Overwrite existing output files (default: skip if file exists) |
 | `--progress-bar` | Show a playback progress bar (default position: top) |
@@ -161,7 +161,7 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `accent_color` | `null` | Accent color for waveform and headline. Hex or RGB array. |
 | `font_color` | `null` | Text color for title and copy. Hex or RGB array. Default: white. |
 | `font` | `null` | Font name (e.g. `"Inter"`) or path to a `.ttf`/`.otf` file |
-| `format` | `"square"` | Default output format: `"square"`, `"reel"`, or `"carousel"` |
+| `format` | `"square"` | Default output format: `"square"`, `"reel"`, `"carousel"`, or `"all"` |
 | `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
 | `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
 | `progress_bar` | `true` | Show playback progress bar on all tiles |
