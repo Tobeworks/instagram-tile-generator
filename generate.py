@@ -373,7 +373,8 @@ def extract_waveform_frames(audio_path: Path, offset, duration, fps, n_bars):
     samples_per_frame = total_samples / n_frames
     samples_per_bar = samples_per_frame / n_bars
 
-    for fi in range(n_frames):
+    from tqdm import tqdm
+    for fi in tqdm(range(n_frames), desc="    waveform", unit="fr", leave=True):
         frame_start = int(fi * samples_per_frame)
         frame_audio = y[frame_start:frame_start + int(samples_per_frame)]
         if len(frame_audio) == 0:
@@ -641,6 +642,13 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
         ))
 
     print(f"  Rendering {actual_duration:.1f}s at {FPS}fps ({n_frames} frames)...")
+    from tqdm import tqdm
+    pbar = tqdm(total=n_frames, desc="    rendering", unit="fr")
+    _orig_make_frame = make_frame
+    def make_frame(t):
+        frame = _orig_make_frame(t)
+        pbar.update(1)
+        return frame
     video = VideoClip(make_frame, duration=actual_duration)
 
     audio = AudioFileClip(str(audio_path))
