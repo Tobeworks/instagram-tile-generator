@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 insta-tile-generator — turn audio + cover art into Instagram-ready MP4 tiles.
 """
@@ -262,32 +261,58 @@ def load_config(data_dir: Path):
     return ep_name, None, tracks, {}
 
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _find_image_for_track(wav: Path, data_dir: Path):
+    """Return the best matching image for a track, or None."""
+    # 1. same stem as audio file
+    for ext in IMAGE_EXTENSIONS:
+        candidate = data_dir / (wav.stem + ext)
+        if candidate.exists():
+            return candidate
+    # 2. cover.*
+    for ext in IMAGE_EXTENSIONS:
+        candidate = data_dir / ("cover" + ext)
+        if candidate.exists():
+            return candidate
+    # 3. any image in the folder
+    for ext in IMAGE_EXTENSIONS:
+        found = list(data_dir.glob(f"*{ext}"))
+        if found:
+            return found[0]
+    return None
+
+
 def generate_config(data_dir: Path, clip_duration_default=30):
     config_path = data_dir / "config.json"
     if config_path.exists():
-        print(f"config.json already exists at {config_path}\nDelete it first or edit it directly.")
-        sys.exit(1)
-
-    covers = list(data_dir.glob("cover.*"))
-    cover_name = covers[0].name if covers else "cover.png"
-    cover_path = covers[0] if covers else None
-
-    auto_accent = get_dominant_color(cover_path)
-    accent_hex  = "#{:02x}{:02x}{:02x}".format(*auto_accent)
-    print(f"  Detected accent color: {accent_hex}  (from {cover_name})")
+        answer = input(f"config.json already exists. Overwrite? [y/N] ").strip().lower()
+        if answer != "y":
+            print("Aborted.")
+            sys.exit(0)
+        config_path.unlink()
 
     wav_files = sorted(data_dir.glob("*.wav"))
     if not wav_files:
         print(f"No WAV files found in {data_dir}", file=sys.stderr)
         sys.exit(1)
 
+    # pick a representative image for the accent color (first track's image or any image)
+    first_image = _find_image_for_track(wav_files[0], data_dir)
+    auto_accent = get_dominant_color(first_image)
+    accent_hex  = "#{:02x}{:02x}{:02x}".format(*auto_accent)
+    print(f"  Detected accent color: {accent_hex}  (from {first_image.name if first_image else 'none'})")
+
     tracks = []
     for wav in wav_files:
         total = get_audio_duration(wav)
         auto_start = max(0.0, (total - clip_duration_default) / 2)
+        img = _find_image_for_track(wav, data_dir)
+        image_name = img.name if img else "cover.png"
         tracks.append({
             "audio":              wav.name,
-            "image":              cover_name,
+            "image":              image_name,
             "headline":           "",
             "title":              parse_track_title(wav.name),
             "copy":               "",
