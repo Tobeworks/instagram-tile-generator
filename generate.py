@@ -146,12 +146,12 @@ def _track_dict(audio, image, headline="", title=None, copy="", start=None,
                 accent_color=None, font=None, font_color=None,
                 overlay_color=None, overlay_opacity=None,
                 typewriter_headline=None, typewriter_title=None, typewriter_copy=None,
-                progress_bar_color=None):
+                progress_bar_color=None, no_text=False):
     return {
         "audio":               audio,
         "image":               image,
         "headline":            headline,
-        "title":               title or parse_track_title(audio.name if hasattr(audio, "name") else str(audio)),
+        "title":               parse_track_title(audio.name if hasattr(audio, "name") else str(audio)) if title is None else title,
         "copy":                copy,
         "start":               parse_timecode(start),
         "accent_color":        parse_color(accent_color),
@@ -163,6 +163,7 @@ def _track_dict(audio, image, headline="", title=None, copy="", start=None,
         "typewriter_title":    typewriter_title,
         "typewriter_copy":     typewriter_copy,
         "progress_bar_color":  parse_color(progress_bar_color),
+        "no_text":             bool(no_text),
     }
 
 
@@ -222,6 +223,7 @@ def load_config(data_dir: Path):
             "overlay_color":         parse_color(cfg.get("overlay_color", None)),
             "overlay_opacity":       cfg.get("overlay_opacity", None),
             "format":                cfg.get("format", None),
+            "waveform":              cfg.get("waveform", True),
             "typewriter_headline":   cfg.get("typewriter_headline", False),
             "typewriter_title":      cfg.get("typewriter_title", False),
             "typewriter_copy":       cfg.get("typewriter_copy", False),
@@ -244,6 +246,7 @@ def load_config(data_dir: Path):
                 typewriter_title     = t.get("typewriter_title", None),
                 typewriter_copy      = t.get("typewriter_copy", None),
                 progress_bar_color   = t.get("progress_bar_color", None),
+                no_text              = t.get("no_text", False),
             )
             for t in cfg.get("tracks", [])
         ]
@@ -489,12 +492,13 @@ def render_frame(image_path, bar_heights, text_config, size,
 
     # build blocks — always include if full text exists so layout stays stable
     blocks = []
-    if headline_full:
-        blocks.append(("headline", headline_full.upper(), font_headline, headline_full, headline_alpha()))
-    if title_full:
-        blocks.append(("title",    title_visible,          font_title,   title_full,    title_alpha()))
-    if copy_full:
-        blocks.append(("copy",     copy_full,              font_copy,    copy_full,     copy_alpha()))
+    if not text_config.get("no_text"):
+        if headline_full:
+            blocks.append(("headline", headline_full.upper(), font_headline, headline_full, headline_alpha()))
+        if title_full:
+            blocks.append(("title",    title_visible,          font_title,   title_full,    title_alpha()))
+        if copy_full:
+            blocks.append(("copy",     copy_full,              font_copy,    copy_full,     copy_alpha()))
 
     # anchor layout to full text so nothing shifts during animation
     total_text_h = sum(draw.textbbox((0, 0), full, font=font)[3] for _, _, font, full, _ in blocks)
@@ -592,7 +596,7 @@ def save_carousel_slide(track, index, carousel_dir: Path, force=False,
 
 
 def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_start,
-                 force=False, show_progress_bar=False,
+                 force=False, show_progress_bar=False, show_waveform=True,
                  ep_accent=None, ep_font=None, ep_font_color=None,
                  ep_overlay_color=None, ep_overlay_opacity=None,
                  cli_accent=None, cli_font=None, cli_font_color=None,
@@ -624,16 +628,20 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
     tw_copy     = track.get("typewriter_copy")     if track.get("typewriter_copy")     is not None else ep_typewriter_copy
     pb_color        = track.get("progress_bar_color")  or ep_progress_bar_color or None
 
-    print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
-    waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
-    n_frames = len(waveform_frames)
+    if show_waveform:
+        print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
+        waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
+    else:
+        waveform_frames = None
+    n_frames = int(clip_duration * FPS) if waveform_frames is None else len(waveform_frames)
     actual_duration = n_frames / FPS
 
     def make_frame(t):
         fi = min(int(t * FPS), n_frames - 1)
         progress = (t / actual_duration) if show_progress_bar else None
+        bar_heights = waveform_frames[fi] if waveform_frames is not None else None
         return np.array(render_frame(
-            track["image"], waveform_frames[fi], track, size,
+            track["image"], bar_heights, track, size,
             accent_color=accent, font_color=font_color,
             overlay_color=ov_color, overlay_opacity=ov_opacity,
             progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
@@ -698,6 +706,8 @@ def main():
                         help="Gradient overlay color as hex or r,g,b. Default: #000000.")
     parser.add_argument("--overlay-opacity", type=float, default=None, dest="overlay_opacity",
                         help="Gradient overlay strength 0.0–1.0. Default: 0.7.")
+    parser.add_argument("--no-waveform", action="store_true", dest="no_waveform",
+                        help="Disable the animated waveform visualisation.")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir).resolve()
@@ -719,6 +729,7 @@ def main():
     active_formats = list(FORMATS.keys()) if output_format == "all" else [output_format]
     explicit_start  = parse_timecode(args.start)
     show_progress    = args.progress_bar or extras.get("progress_bar", False)
+    show_waveform    = False if args.no_waveform else extras.get("waveform", True)
     pb_position      = args.progress_bar_position or extras.get("progress_bar_position", "top")
     progress_bar_top = pb_position != "bottom"
     ep_font          = extras.get("font") or None
@@ -757,12 +768,14 @@ def main():
     if cli_font_color or ep_font_color:
         fc = cli_font_color or ep_font_color
         print(f"  font color  : #{fc[0]:02x}{fc[1]:02x}{fc[2]:02x}")
+    print(f"  waveform    : {'on' if show_waveform else 'off'}")
     print(f"  progress bar: {'on' if show_progress else 'off'}")
     print(f"  force       : {'on' if args.force else 'off'}")
     print(f"  tracks      : {len(tracks)}")
     print()
 
-    kwargs = dict(ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
+    kwargs = dict(show_waveform=show_waveform,
+                  ep_accent=ep_accent, ep_font=ep_font, ep_font_color=ep_font_color,
                   ep_overlay_color=ep_overlay_color, ep_overlay_opacity=ep_overlay_opacity,
                   cli_accent=cli_accent, cli_font=cli_font, cli_font_color=cli_font_color,
                   cli_overlay_color=cli_overlay_color, cli_overlay_opacity=cli_overlay_opacity,

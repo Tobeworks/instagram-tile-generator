@@ -50,6 +50,11 @@
       "maximum": 1.0,
       "default": 0.7
     },
+    "waveform": {
+      "type": "boolean",
+      "description": "Show the animated waveform visualisation on all tiles.",
+      "default": true
+    },
     "progress_bar": {
       "type": "boolean",
       "description": "Show a playback progress bar on all tiles.",
@@ -182,6 +187,11 @@
         "progress_bar_color": {
           "$ref": "#/$defs/color",
           "description": "Per-track progress bar background color override. Inherits EP-level value if null."
+        },
+        "no_text": {
+          "type": "boolean",
+          "description": "Hide all text (headline, title, copy) for this track.",
+          "default": false
         },
         "typewriter_headline": {
           "type": ["boolean", "null"],

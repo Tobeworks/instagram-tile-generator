@@ -102,6 +102,7 @@ python generate.py <data_dir> [options]
 | `--overlay-color COLOR` | Gradient overlay color as `#rrggbb` or `r,g,b`. Default: `#000000`. |
 | `--overlay-opacity N` | Gradient overlay strength `0.0`–`1.0`. Default: `0.7`. |
 | `--font NAME_OR_PATH` | Font name (e.g. `"Inter"`) or path to a `.ttf`/`.otf` file. Overrides `config.json` and system font. |
+| `--no-waveform` | Disable the animated waveform visualisation. |
 
 ### Without a config.json
 
@@ -164,6 +165,7 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `format` | `"square"` | Default output format: `"square"`, `"reel"`, `"carousel"`, or `"all"` |
 | `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
 | `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
+| `waveform` | `true` | Show the animated waveform visualisation on all tiles |
 | `progress_bar` | `true` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
 | `progress_bar_color` | `null` | Color of the progress bar background track. Hex or RGB array. Default: white. |
@@ -178,7 +180,8 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `audio` | yes | Filename relative to the release folder |
 | `image` | no | Cover image filename. Falls back to `cover.png` |
 | `headline` | no | Small uppercase label above the title |
-| `title` | no | Track title. Parsed from filename if omitted |
+| `title` | no | Track title. Parsed from filename if `null` or omitted. Set to `""` to show no title. |
+| `no_text` | no | Set to `true` to hide all text (headline, title, copy) for this track. |
 | `copy` | no | Small text line below the title |
 | `start` | no | Clip start as `M:SS` or seconds. Default: center of track |
 | `overlay_color` | no | Override EP-level overlay color for this track only |
