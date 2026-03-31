@@ -2,6 +2,8 @@
 insta-tile-generator — turn audio + cover art into Instagram-ready MP4 tiles.
 """
 
+VERSION = "2.3.0"
+
 import argparse
 import colorsys
 import json
@@ -704,8 +706,9 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
 def main():
     parser = argparse.ArgumentParser(
         prog="generate.py",
-        description="Generate Instagram MP4 tiles from audio tracks and cover art.",
+        description=f"Generate Instagram MP4 tiles from audio tracks and cover art. v{VERSION}",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("data_dir",
                         help="Path to a release folder, e.g. data/my-ep")
     parser.add_argument("--init", action="store_true",
@@ -791,7 +794,8 @@ def main():
     project_root = Path(__file__).parent
 
     mode = "preview" if args.preview else output_format
-    print(f"\n  release     : {ep_name}")
+    print(f"\n  version     : {VERSION}")
+    print(f"  release     : {ep_name}")
     print(f"  format      : {output_format}  |  mode: {mode}")
     if clip_duration:
         print(f"  duration    : {clip_duration}s")
