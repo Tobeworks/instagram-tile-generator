@@ -146,7 +146,8 @@ def _track_dict(audio, image, headline="", title=None, copy="", start=None,
                 accent_color=None, font=None, font_color=None,
                 overlay_color=None, overlay_opacity=None,
                 typewriter_headline=None, typewriter_title=None, typewriter_copy=None,
-                progress_bar_color=None, no_text=False):
+                progress_bar_color=None, no_text=False,
+                waveform_height=None, waveform_y=None, waveform_opacity=None, waveform_bars=None):
     return {
         "audio":               audio,
         "image":               image,
@@ -164,6 +165,10 @@ def _track_dict(audio, image, headline="", title=None, copy="", start=None,
         "typewriter_copy":     typewriter_copy,
         "progress_bar_color":  parse_color(progress_bar_color),
         "no_text":             bool(no_text),
+        "waveform_height":     int(waveform_height) if waveform_height is not None else None,
+        "waveform_y":          float(waveform_y) if waveform_y is not None else None,
+        "waveform_opacity":    int(waveform_opacity) if waveform_opacity is not None else None,
+        "waveform_bars":       int(waveform_bars) if waveform_bars is not None else None,
     }
 
 
@@ -224,6 +229,10 @@ def load_config(data_dir: Path):
             "overlay_opacity":       cfg.get("overlay_opacity", None),
             "format":                cfg.get("format", None),
             "waveform":              cfg.get("waveform", True),
+            "waveform_height":       cfg.get("waveform_height", None),
+            "waveform_y":            cfg.get("waveform_y", None),
+            "waveform_opacity":      cfg.get("waveform_opacity", None),
+            "waveform_bars":         cfg.get("waveform_bars", None),
             "typewriter_headline":   cfg.get("typewriter_headline", False),
             "typewriter_title":      cfg.get("typewriter_title", False),
             "typewriter_copy":       cfg.get("typewriter_copy", False),
@@ -247,6 +256,10 @@ def load_config(data_dir: Path):
                 typewriter_copy      = t.get("typewriter_copy", None),
                 progress_bar_color   = t.get("progress_bar_color", None),
                 no_text              = t.get("no_text", False),
+                waveform_height      = t.get("waveform_height", None),
+                waveform_y           = t.get("waveform_y", None),
+                waveform_opacity     = t.get("waveform_opacity", None),
+                waveform_bars        = t.get("waveform_bars", None),
             )
             for t in cfg.get("tracks", [])
         ]
@@ -329,6 +342,10 @@ def generate_config(data_dir: Path, clip_duration_default=30):
             "typewriter_title":    None,
             "typewriter_copy":     None,
             "progress_bar_color":  None,
+            "waveform_height":     None,
+            "waveform_y":          None,
+            "waveform_opacity":    None,
+            "waveform_bars":       None,
         })
         print(f"  {wav.name}: {total:.1f}s  →  start={format_timecode(auto_start)}")
 
@@ -354,6 +371,10 @@ def generate_config(data_dir: Path, clip_duration_default=30):
         "typewriter_headline":   False,
         "typewriter_title":      False,
         "typewriter_copy":       False,
+        "waveform_height":       None,
+        "waveform_y":            None,
+        "waveform_opacity":      None,
+        "waveform_bars":         None,
         "tracks":                tracks,
     }
     with open(config_path, "w") as f:
@@ -428,7 +449,8 @@ def render_frame(image_path, bar_heights, text_config, size,
                  progress=None, progress_bar_top=True, font_path=None,
                  typewriter_t=None,
                  typewriter_headline=False, typewriter_title=False, typewriter_copy=False,
-                 progress_bar_color=None):
+                 progress_bar_color=None,
+                 waveform_height=None, waveform_y=None, waveform_opacity=None, waveform_bars=None):
     w, h = size
     ac = accent_color or (255, 255, 255)
     oc = overlay_color or (0, 0, 0)
@@ -450,13 +472,16 @@ def render_frame(image_path, bar_heights, text_config, size,
     draw = ImageDraw.Draw(frame)
 
     if bar_heights is not None and len(bar_heights) > 0:
-        bar_w = max(2, (w - 2 * PADDING_X - (N_BARS - 1) * BAR_GAP) // N_BARS)
-        total_bar_w = N_BARS * bar_w + (N_BARS - 1) * BAR_GAP
+        n_bars      = waveform_bars    or N_BARS
+        max_bh      = waveform_height  or MAX_BAR_HEIGHT
+        wf_opacity  = waveform_opacity if waveform_opacity is not None else 200
+        cy          = int(h * (waveform_y if waveform_y is not None else 0.52))
+        bar_w = max(2, (w - 2 * PADDING_X - (n_bars - 1) * BAR_GAP) // n_bars)
+        total_bar_w = n_bars * bar_w + (n_bars - 1) * BAR_GAP
         x0 = (w - total_bar_w) // 2
-        cy = int(h * 0.52)
-        waveform_fill = (*ac, 200)
+        waveform_fill = (*ac, wf_opacity)
         for i, height_norm in enumerate(bar_heights):
-            bh = max(3, int(height_norm * MAX_BAR_HEIGHT))
+            bh = max(3, int(height_norm * max_bh))
             x = x0 + i * (bar_w + BAR_GAP)
             draw.rectangle([x, cy - bh, x + bar_w, cy + bh], fill=waveform_fill)
 
@@ -603,7 +628,8 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
                  cli_overlay_color=None, cli_overlay_opacity=None,
                  progress_bar_top=True,
                  ep_typewriter_headline=False, ep_typewriter_title=False, ep_typewriter_copy=False,
-                 ep_progress_bar_color=None):
+                 ep_progress_bar_color=None,
+                 ep_waveform_height=None, ep_waveform_y=None, ep_waveform_opacity=None, ep_waveform_bars=None):
     from moviepy import VideoClip, AudioFileClip
     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut  # type: ignore
 
@@ -627,10 +653,14 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
     tw_title    = track.get("typewriter_title")    if track.get("typewriter_title")    is not None else ep_typewriter_title
     tw_copy     = track.get("typewriter_copy")     if track.get("typewriter_copy")     is not None else ep_typewriter_copy
     pb_color        = track.get("progress_bar_color")  or ep_progress_bar_color or None
+    wf_height   = track.get("waveform_height")  or ep_waveform_height  or None
+    wf_y        = track.get("waveform_y")        if track.get("waveform_y")       is not None else ep_waveform_y
+    wf_opacity  = track.get("waveform_opacity")  if track.get("waveform_opacity") is not None else ep_waveform_opacity
+    wf_bars     = track.get("waveform_bars")     or ep_waveform_bars    or N_BARS
 
     if show_waveform:
         print(f"  Extracting waveform from {audio_path.name} (start={start_time:.1f}s)...")
-        waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, N_BARS)
+        waveform_frames = extract_waveform_frames(audio_path, start_time, clip_duration, FPS, wf_bars)
     else:
         waveform_frames = None
     n_frames = int(clip_duration * FPS) if waveform_frames is None else len(waveform_frames)
@@ -647,6 +677,7 @@ def create_video(track, export_dir: Path, fmt: str, clip_duration, explicit_star
             progress=progress, progress_bar_top=progress_bar_top, font_path=font_path,
             typewriter_t=t, typewriter_headline=tw_headline, typewriter_title=tw_title, typewriter_copy=tw_copy,
             progress_bar_color=pb_color,
+            waveform_height=wf_height, waveform_y=wf_y, waveform_opacity=wf_opacity, waveform_bars=wf_bars,
         ))
 
     print(f"  Rendering {actual_duration:.1f}s at {FPS}fps ({n_frames} frames)...")
@@ -752,6 +783,10 @@ def main():
     ep_typewriter_title    = extras.get("typewriter_title", False)
     ep_typewriter_copy     = extras.get("typewriter_copy", False)
     ep_progress_bar_color  = extras.get("progress_bar_color") or None
+    ep_waveform_height     = extras.get("waveform_height") or None
+    ep_waveform_y          = extras.get("waveform_y")
+    ep_waveform_opacity    = extras.get("waveform_opacity")
+    ep_waveform_bars       = extras.get("waveform_bars") or None
 
     project_root = Path(__file__).parent
 
@@ -783,7 +818,9 @@ def main():
                   ep_typewriter_headline=ep_typewriter_headline,
                   ep_typewriter_title=ep_typewriter_title,
                   ep_typewriter_copy=ep_typewriter_copy,
-                  ep_progress_bar_color=ep_progress_bar_color)
+                  ep_progress_bar_color=ep_progress_bar_color,
+                  ep_waveform_height=ep_waveform_height, ep_waveform_y=ep_waveform_y,
+                  ep_waveform_opacity=ep_waveform_opacity, ep_waveform_bars=ep_waveform_bars)
 
     for fmt in active_formats:
         export_dir = (project_root / "export" / ep_name / fmt).resolve()

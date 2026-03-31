@@ -55,6 +55,32 @@
       "description": "Show the animated waveform visualisation on all tiles.",
       "default": true
     },
+    "waveform_height": {
+      "type": ["integer", "null"],
+      "description": "Max bar height in pixels. Default: 120.",
+      "default": 120,
+      "minimum": 1
+    },
+    "waveform_y": {
+      "type": ["number", "null"],
+      "description": "Vertical center of the waveform as a fraction of the image height (0.0 = top, 1.0 = bottom). Default: 0.52.",
+      "default": 0.52,
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "waveform_opacity": {
+      "type": ["integer", "null"],
+      "description": "Waveform fill opacity, 0–255. Default: 200.",
+      "default": 200,
+      "minimum": 0,
+      "maximum": 255
+    },
+    "waveform_bars": {
+      "type": ["integer", "null"],
+      "description": "Number of bars in the waveform visualisation. Default: 60.",
+      "default": 60,
+      "minimum": 1
+    },
     "progress_bar": {
       "type": "boolean",
       "description": "Show a playback progress bar on all tiles.",
@@ -204,6 +230,28 @@
         "typewriter_copy": {
           "type": ["boolean", "null"],
           "description": "Per-track fade-in override for the copy text. Inherits EP-level value if null."
+        },
+        "waveform_height": {
+          "type": ["integer", "null"],
+          "description": "Per-track max bar height override in pixels. Inherits EP-level value if null.",
+          "minimum": 1
+        },
+        "waveform_y": {
+          "type": ["number", "null"],
+          "description": "Per-track vertical center override (0.0–1.0). Inherits EP-level value if null.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "waveform_opacity": {
+          "type": ["integer", "null"],
+          "description": "Per-track waveform opacity override (0–255). Inherits EP-level value if null.",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "waveform_bars": {
+          "type": ["integer", "null"],
+          "description": "Per-track bar count override. Inherits EP-level value if null.",
+          "minimum": 1
         }
       }
     }

@@ -166,6 +166,10 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `overlay_color` | `"#000000"` | Gradient overlay color. Hex or RGB array. |
 | `overlay_opacity` | `0.7` | Gradient overlay strength `0.0`–`1.0`. |
 | `waveform` | `true` | Show the animated waveform visualisation on all tiles |
+| `waveform_height` | `120` | Max bar height in pixels |
+| `waveform_y` | `0.52` | Vertical center position as a fraction of image height (`0.0` = top, `1.0` = bottom) |
+| `waveform_opacity` | `200` | Waveform opacity `0`–`255` |
+| `waveform_bars` | `60` | Number of bars in the waveform |
 | `progress_bar` | `true` | Show playback progress bar on all tiles |
 | `progress_bar_position` | `"top"` | Position of the progress bar: `"top"` or `"bottom"` |
 | `progress_bar_color` | `null` | Color of the progress bar background track. Hex or RGB array. Default: white. |
@@ -193,6 +197,10 @@ If no `config.json` is present, the script auto-discovers all `.wav` files in th
 | `typewriter_headline` | no | Override EP-level headline fade-in for this track |
 | `typewriter_title` | no | Override EP-level title typewriter for this track |
 | `typewriter_copy` | no | Override EP-level copy fade-in for this track |
+| `waveform_height` | no | Override EP-level max bar height (pixels) for this track |
+| `waveform_y` | no | Override EP-level vertical position (`0.0`–`1.0`) for this track |
+| `waveform_opacity` | no | Override EP-level opacity (`0`–`255`) for this track |
+| `waveform_bars` | no | Override EP-level bar count for this track |
 
 ## Output
 
